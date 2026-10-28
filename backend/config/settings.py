@@ -29,6 +29,8 @@ INSTALLED_APPS = [
     # Módulos de dominio de AutoGest (divididos por responsabilidad)
     "apps.users",
     "apps.core",
+    "apps.budgets",
+    "apps.workorders",
 ]
 
 MIDDLEWARE = [

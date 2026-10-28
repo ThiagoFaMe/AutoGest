@@ -41,3 +41,28 @@ Este documento registra paso a paso todo lo construido en cada Sprint, vinculand
 - **Reglas de negocio implementadas (`backend/apps/core/`):**
   1. **Unicidad de CUIT:** Restricción `UNIQUE` en `cuit` con mensaje claro ante duplicidad.
   2. **Validación comercial de `plazo_pago_dias`:** Restringido estrictamente al rango `1 <= plazo_pago_dias <= 180` días (ej. 30, 45, 60 días), listo para el cálculo automático de vencimientos en el Sprint 5.
+
+---
+
+## Sprint 2: Presupuestos y Apertura Automática de Orden de Trabajo (`HU-005` a `HU-007`)
+
+### `HU-005`: Confección y emisión de presupuestos para particulares
+- **Tablas en PostgreSQL:** `presupuesto` (Tabla 13) e `item_presupuesto` (Tabla 14).
+- **Reglas de negocio implementadas (`backend/apps/budgets/`):**
+  1. **Recálculo dinámico de subtotales:** En `recalculate_budget_totals` (`services.py`), cada renglón calcula `subtotal = cantidad * precio_unitario`, suma `monto_mano_obra` (`mano_obra_chapa` + `mano_obra_pintura`), suma `monto_repuestos` (`repuesto`) y calcula `monto_total = monto_mano_obra + monto_repuestos`.
+  2. **Bloqueo de emisión en cero o sin ítems:** En `emitir_presupuesto` (`services.py`), si el presupuesto no tiene ítems cargados o su `monto_total <= 0`, rechaza el cambio a estado `"emitido"`.
+  3. **Validez de 15 días y vista imprimible/PDF:** Al emitirse formalmente, asigna `estado = "emitido"`, `fecha_emision = date.today()`, `fecha_vencimiento = date.today() + timedelta(days=15)` y habilita el comprobante imprimible en `BudgetPrintModal.jsx`.
+
+### `HU-006`: Confección y emisión de presupuestos para aseguradoras
+- **Reglas de negocio implementadas (`backend/apps/budgets/services.py`):**
+  1. **Campos periciales obligatorios:** En `validate_budget_modality_rules`, cuando `tipo == "aseguradora"` exige seleccionar `compania`, `nro_siniestro` y `nombre_perito`.
+  2. **Exclusión de repuestos provistos por el seguro:** En `recalculate_budget_totals`, cuando `tipo == "aseguradora"`, fija `monto_repuestos = 0.00` y computa dentro de `monto_total` únicamente la mano de obra de chapa y pintura, permitiendo listar las piezas como referencia técnica para la recepción.
+  3. **Seguimiento de días a la espera del perito:** Propiedad calculada `dias_espera_aprobacion` expuesta en la tabla principal de `BudgetsPage.jsx`.
+
+### `HU-007`: Aprobación o rechazo de presupuestos y generación automática de Orden de Trabajo
+- **Tablas en PostgreSQL:** `orden_de_trabajo` (Tabla 15) y `fase_reparacion` (Tabla 16) en `backend/apps/workorders/models.py`.
+- **Reglas de negocio implementadas (`aprobar_presupuesto_y_crear_ot` en `backend/apps/budgets/services.py`):**
+  1. **Creación transaccional de `OrdenDeTrabajo`:** Al aprobar un presupuesto `"emitido"`, cambia su estado a `"aprobado"`, exige `nro_orden_aseguradora` si es un seguro, crea la `OrdenDeTrabajo` con código correlativo `OT-2026-XXX` y fija `saldo_pendiente = monto_total`.
+  2. **Inicialización automática de las 8 fases operativas:** Genera en `FaseReparacion` las 8 etapas secuenciales del 1 al 8 (`1-Recepción`, `2-Desarme`, `3-Chapa`, `4-Preparación`, `5-Pintura`, `6-Armado`, `7-Pulido`, `8-Alistado para entrega`).
+  3. **Relación unívoca 1 a 1 (`OneToOneField`):** Bloquea cualquier intento de generar más de una orden sobre el mismo presupuesto o sobre presupuestos rechazados/vencidos.
+

@@ -49,10 +49,20 @@ export default function MainLayout() {
           </NavLink>
 
           {(user?.rol === "administrador" || user?.rol === "administrativo") && (
-            <NavLink to="/aseguradoras" className="autogest-nav-link">
-              <i className="bi bi-shield-check"></i>
-              <span>Aseguradoras (HU-004)</span>
-            </NavLink>
+            <>
+              <NavLink to="/aseguradoras" className="autogest-nav-link">
+                <i className="bi bi-shield-check"></i>
+                <span>Aseguradoras (HU-004)</span>
+              </NavLink>
+
+              <div className="px-2 mt-3 mb-1 text-uppercase text-secondary small fw-semibold">
+                Sprint 2 • Cotización y OT
+              </div>
+              <NavLink to="/presupuestos" className="autogest-nav-link">
+                <i className="bi bi-file-earmark-text-fill"></i>
+                <span>Presupuestos (HU-005..007)</span>
+              </NavLink>
+            </>
           )}
 
           {user?.rol === "administrador" && (

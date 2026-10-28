@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import MainLayout from "./layouts/MainLayout";
 import LoginPage from "./pages/auth/LoginPage";
+import BudgetsPage from "./pages/budgets/BudgetsPage";
 import ClientsPage from "./pages/clients/ClientsPage";
 import InsurersPage from "./pages/insurers/InsurersPage";
 import UsersPage from "./pages/users/UsersPage";
@@ -41,6 +42,14 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={["administrador", "administrativo"]}>
                   <InsurersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="presupuestos"
+              element={
+                <ProtectedRoute allowedRoles={["administrador", "administrativo"]}>
+                  <BudgetsPage />
                 </ProtectedRoute>
               }
             />
