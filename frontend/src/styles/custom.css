@@ -1,0 +1,60 @@
+:root {
+  --autogest-sidebar-bg: #111827;
+  --autogest-sidebar-active: #2563eb;
+  --autogest-accent: #1d4ed8;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+.autogest-sidebar {
+  width: 265px;
+  min-height: 100vh;
+  background-color: var(--autogest-sidebar-bg);
+  color: #e5e7eb;
+  flex-shrink: 0;
+}
+
+.autogest-nav-link {
+  color: #9ca3af;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  font-weight: 500;
+  transition: all 0.15s ease-in-out;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.autogest-nav-link:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.autogest-nav-link.active {
+  color: #ffffff;
+  background-color: var(--autogest-sidebar-active);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+
+.patente-badge {
+  font-family: "Courier New", Courier, monospace;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background-color: #1e293b;
+  color: #f8fafc;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.2rem 0.55rem;
+  display: inline-block;
+}
+
+.card-stat {
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
