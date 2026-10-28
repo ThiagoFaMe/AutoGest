@@ -204,7 +204,7 @@ def aprobar_presupuesto_y_crear_ot(
         fecha_estimada_entrega=fecha_estimada_entrega,
         tipo_cliente=presupuesto.tipo,
         nro_orden_aseguradora=(nro_orden_aseguradora or "").strip(),
-        estado_actual="1-Recepción (Lista para iniciar)",
+        estado_actual="Recepción",
         monto_total=presupuesto.monto_total,
         saldo_pendiente=presupuesto.monto_total,
         vehiculo=presupuesto.vehiculo,
