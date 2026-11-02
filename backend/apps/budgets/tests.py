@@ -237,3 +237,58 @@ class Sprint2PresupuestosYOrdenTrabajoTests(TestCase):
             format="json",
         )
         self.assertEqual(res_dup.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_formatos_reales_taller_sergio_talonario_y_planilla_casillas_x(self):
+        """
+        Verifica los dos formatos físicos digitalizados de Taller Sergio:
+        1) Talonario libre para Terceros/Particulares (Anexo 1: detalle_libre + rubros_importes).
+        2) Planilla de 3 columnas con casillas [X] C/R/P para Aseguradoras (Anexo 2: planilla_marcaciones).
+        """
+        # 1) Talonario Particular estilo libre
+        res_part = self.client.post(
+            "/api/budgets/presupuestos/",
+            {
+                "tipo": "particular",
+                "id_cliente": self.cliente.id_cliente,
+                "id_vehiculo": self.vehiculo.id_vehiculo,
+                "detalle_libre": "Corsa AA 467 SL\nPuerta Del/Izq Pintar y Colocar.\nM/O = $600.000\n-10% En Efectivo (Billete) $540.000",
+                "rubros_importes": {
+                    "mano_obra": 600000,
+                    "repuestos": 0,
+                    "descuento_efectivo_porc": 10,
+                    "total_final": 540000,
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(res_part.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Decimal(res_part.data["monto_total"]), Decimal("540000.00"))
+
+        # 2) Planilla Aseguradora con casillas [X] (C: Cambiar, R: Reparar, P: Pintar)
+        res_aseg = self.client.post(
+            "/api/budgets/presupuestos/",
+            {
+                "tipo": "aseguradora",
+                "id_cliente": self.cliente.id_cliente,
+                "id_vehiculo": self.vehiculo.id_vehiculo,
+                "id_compania": self.aseguradora.id_compania,
+                "nro_siniestro": "SIN-2026-7712",
+                "nombre_perito": "Pablo Martín",
+                "planilla_marcaciones": {
+                    "PARTE_DELANTERA__Paragolpes": {"C": True, "R": False, "P": True},
+                    "PARTE_DELANTERA__Guardabarro Der.": {"C": False, "R": True, "P": True},
+                    "LADO_DERECHO__Puerta Delantera": {"C": True, "R": False, "P": True},
+                },
+                "rubros_importes": {
+                    "mano_obra": 3200000,
+                    "repuestos": 180000,
+                    "incluir_repuestos_en_total": True,
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(res_aseg.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Decimal(res_aseg.data["monto_mano_obra"]), Decimal("3200000.00"))
+        self.assertEqual(Decimal(res_aseg.data["monto_repuestos"]), Decimal("180000.00"))
+        self.assertEqual(Decimal(res_aseg.data["monto_total"]), Decimal("3380000.00"))
+        self.assertTrue(len(res_aseg.data["items"]) >= 4)

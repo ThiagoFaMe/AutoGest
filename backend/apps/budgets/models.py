@@ -103,6 +103,24 @@ class Presupuesto(models.Model):
     observaciones = models.CharField(
         max_length=500, blank=True, default="", db_column="observaciones"
     )
+    detalle_libre = models.TextField(
+        blank=True,
+        default="",
+        db_column="detalle_libre",
+        help_text="Texto libre estilo documento/talonario para presupuestos de terceros/particulares (Anexo 1).",
+    )
+    planilla_marcaciones = models.JSONField(
+        default=dict,
+        blank=True,
+        db_column="planilla_marcaciones",
+        help_text="Matriz de casillas marcadas con [X] (C: Cambiar, R: Reparar, P: Pintar) en la planilla de aseguradoras (Anexo 2).",
+    )
+    rubros_importes = models.JSONField(
+        default=dict,
+        blank=True,
+        db_column="rubros_importes",
+        help_text="Desglose de rubros al pie de la planilla (Mano de Obra, Pintura, Mecánica, Electricidad, Tapicería, Repuestos, IVA, Efectivo).",
+    )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
     class Meta:

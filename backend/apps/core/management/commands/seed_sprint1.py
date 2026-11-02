@@ -185,6 +185,8 @@ class Command(BaseCommand):
                     defaults={**v_data, "cliente": cliente},
                 )
 
+        from apps.budgets.services import build_items_from_taller_forms, recalculate_budget_totals
+
         # Semilla de Presupuestos y Orden de Trabajo inicial (Sprint 2: HU-005, HU-006, HU-007)
         if Presupuesto.objects.count() == 0:
             v_amarok = Vehiculo.objects.filter(patente="AF482KL").first()
@@ -194,7 +196,7 @@ class Command(BaseCommand):
             fed_pat = CompaniaAseguradora.objects.filter(cuit="30-50003196-0").first()
 
             if v_amarok and sancor:
-                # 1) Presupuesto Aseguradora Aprobado -> Genera OT-2026-001 con sus 8 fases
+                # 1) Planilla Aseguradora Aprobada -> Genera OT-2026-001 con sus 8 fases
                 p1 = Presupuesto.objects.create(
                     tipo=Presupuesto.Tipo.ASEGURADORA,
                     vehiculo=v_amarok,
@@ -202,31 +204,26 @@ class Command(BaseCommand):
                     compania=sancor,
                     nro_siniestro="SIN-SANCOR-44890",
                     nombre_perito="Ing. Roberto Sosa",
-                    observaciones="Siniestro lateral derecho. Repuestos provistos por Sancor Seguros.",
+                    planilla_marcaciones={
+                        "PARTE_DELANTERA__Paragolpes": {"C": True, "R": False, "P": True},
+                        "PARTE_DELANTERA__Guardabarro Der.": {"C": False, "R": True, "P": True},
+                        "LADO_DERECHO__Puerta Delantera": {"C": False, "R": True, "P": True},
+                        "LADO_DERECHO__Espejo": {"C": True, "R": False, "P": True},
+                    },
+                    rubros_importes={
+                        "mano_obra": 3200000,
+                        "pintura": 0,
+                        "mecanica": 0,
+                        "electricidad": 0,
+                        "tapiceria": 0,
+                        "repuestos": 180000,
+                        "iva": 0,
+                        "incluir_repuestos_en_total": True,
+                    },
+                    observaciones="Siniestro lateral derecho según planilla con casillas [X].",
                 )
-                sync_budget_items(
-                    p1,
-                    [
-                        {
-                            "descripcion": "Desarme y reemplazo de puerta delantera derecha y guardabarros",
-                            "tipo_item": ItemPresupuesto.TipoItem.MANO_OBRA_CHAPA,
-                            "cantidad": 1,
-                            "precio_unitario": Decimal("220000.00"),
-                        },
-                        {
-                            "descripcion": "Preparación y aplicación de pintura bicapa Gris Indium (3 paños)",
-                            "tipo_item": ItemPresupuesto.TipoItem.MANO_OBRA_PINTURA,
-                            "cantidad": 3,
-                            "precio_unitario": Decimal("115000.00"),
-                        },
-                        {
-                            "descripcion": "Guardabarros delantero derecho original (Provee Aseguradora)",
-                            "tipo_item": ItemPresupuesto.TipoItem.REPUESTO,
-                            "cantidad": 1,
-                            "precio_unitario": Decimal("0.00"),
-                        },
-                    ],
-                )
+                build_items_from_taller_forms(p1)
+                recalculate_budget_totals(p1)
                 emitir_presupuesto(p1)
                 aprobar_presupuesto_y_crear_ot(
                     presupuesto=p1,
@@ -235,7 +232,7 @@ class Command(BaseCommand):
                 )
 
             if v_corolla and fed_pat:
-                # 2) Presupuesto Aseguradora Emitido (A la espera de orden pericial)
+                # 2) Planilla Aseguradora Emitida (A la espera de orden pericial)
                 p2 = Presupuesto.objects.create(
                     tipo=Presupuesto.Tipo.ASEGURADORA,
                     vehiculo=v_corolla,
@@ -243,58 +240,50 @@ class Command(BaseCommand):
                     compania=fed_pat,
                     nro_siniestro="FP-2026-10934",
                     nombre_perito="Téc. Gustavo Almirón",
+                    planilla_marcaciones={
+                        "PARTE_TRASERA__Paragolpes": {"C": True, "R": False, "P": True},
+                        "PARTE_TRASERA__Tapa Baúl/Mol./Port.": {"C": False, "R": True, "P": True},
+                        "PARTE_TRASERA__Guardabarro Der.": {"C": False, "R": True, "P": True},
+                    },
+                    rubros_importes={
+                        "mano_obra": 2000000,
+                        "pintura": 0,
+                        "mecanica": 0,
+                        "electricidad": 0,
+                        "tapiceria": 0,
+                        "repuestos": 2300000,
+                        "iva": 0,
+                        "incluir_repuestos_en_total": True,
+                    },
                     observaciones="Impacto trasero en baúl y paragolpes.",
                 )
-                sync_budget_items(
-                    p2,
-                    [
-                        {
-                            "descripcion": "Conformado de panel de cola y encuadre de tapa de baúl",
-                            "tipo_item": ItemPresupuesto.TipoItem.MANO_OBRA_CHAPA,
-                            "cantidad": 1,
-                            "precio_unitario": Decimal("185000.00"),
-                        },
-                        {
-                            "descripcion": "Pintura tricapa Blanco Perlado (070) en cabina presurizada",
-                            "tipo_item": ItemPresupuesto.TipoItem.MANO_OBRA_PINTURA,
-                            "cantidad": 2,
-                            "precio_unitario": Decimal("135000.00"),
-                        },
-                    ],
-                )
+                build_items_from_taller_forms(p2)
+                recalculate_budget_totals(p2)
                 emitir_presupuesto(p2)
 
             if v_focus:
-                # 3) Presupuesto Particular Emitido (Mano de obra + Repuestos cotizados por el taller)
+                # 3) Presupuesto Particular / Terceros Emitido (Formato Talonario Libre)
                 p3 = Presupuesto.objects.create(
                     tipo=Presupuesto.Tipo.PARTICULAR,
                     vehiculo=v_focus,
                     cliente=v_focus.cliente,
-                    observaciones="Cotización particular con provisión de óptica y paragolpes por el taller.",
+                    detalle_libre=(
+                        "Focus III   NQP 842\n"
+                        "Puerta Del/Izq Pintar y Colocar.\n"
+                        "Lateral Derecho Rep y Pintar.\n"
+                        "M/O = $ 800.000\n"
+                        "En Efectivo (Billete) $ 720.000"
+                    ),
+                    rubros_importes={
+                        "mano_obra": 800000,
+                        "repuestos": 0,
+                        "descuento_efectivo_porc": 10,
+                        "total_final": 720000,
+                    },
+                    observaciones="Cotización en talonario para cliente particular con descuento en efectivo.",
                 )
-                sync_budget_items(
-                    p3,
-                    [
-                        {
-                            "descripcion": "Reparación de frente y encuadre de capot",
-                            "tipo_item": ItemPresupuesto.TipoItem.MANO_OBRA_CHAPA,
-                            "cantidad": 1,
-                            "precio_unitario": Decimal("140000.00"),
-                        },
-                        {
-                            "descripcion": "Pintura de capot y paragolpes delantero Rojo Bari",
-                            "tipo_item": ItemPresupuesto.TipoItem.MANO_OBRA_PINTURA,
-                            "cantidad": 2,
-                            "precio_unitario": Decimal("105000.00"),
-                        },
-                        {
-                            "descripcion": "Óptica delantera izquierda Ford Focus III",
-                            "tipo_item": ItemPresupuesto.TipoItem.REPUESTO,
-                            "cantidad": 1,
-                            "precio_unitario": Decimal("195000.00"),
-                        },
-                    ],
-                )
+                build_items_from_taller_forms(p3)
+                recalculate_budget_totals(p3)
                 emitir_presupuesto(p3)
 
         self.stdout.write(self.style.SUCCESS("Semilla del Sprint 1 y Sprint 2 aplicada exitosamente."))

@@ -1,5 +1,8 @@
 """
 Serializadores REST para Presupuestos e Ítems de Presupuesto (HU-005, HU-006, HU-007).
+Incluye soporte completo para:
+- Talonario libre de Terceros/Particulares (detalle_libre + rubros_importes)
+- Planilla de casillas [X] C/R/P de Compañías Aseguradoras (planilla_marcaciones + rubros_importes)
 """
 from django.db import transaction
 from rest_framework import serializers
@@ -7,6 +10,7 @@ from rest_framework import serializers
 from apps.core.models import Cliente, CompaniaAseguradora, Vehiculo
 from .models import ItemPresupuesto, Presupuesto
 from .services import (
+    build_items_from_taller_forms,
     recalculate_budget_totals,
     sync_budget_items,
     validate_budget_modality_rules,
@@ -42,12 +46,17 @@ class PresupuestoSerializer(serializers.ModelSerializer):
     )
     items = ItemPresupuestoSerializer(many=True, required=False)
 
-    # Campos enriquecidos de lectura para el listado y vista imprimible (PDF)
+    # Campos enriquecidos de lectura para el listado y vistas reales de impresión
     vehiculo_patente = serializers.CharField(source="vehiculo.patente", read_only=True)
+    vehiculo_marca = serializers.CharField(source="vehiculo.marca", read_only=True)
+    vehiculo_modelo = serializers.CharField(source="vehiculo.modelo", read_only=True)
+    vehiculo_anio = serializers.IntegerField(source="vehiculo.anio", read_only=True)
+    vehiculo_color = serializers.CharField(source="vehiculo.color", read_only=True)
     vehiculo_detalle = serializers.SerializerMethodField(read_only=True)
     cliente_nombre = serializers.SerializerMethodField(read_only=True)
     cliente_dni = serializers.CharField(source="cliente.dni", read_only=True)
     cliente_telefono = serializers.CharField(source="cliente.telefono", read_only=True)
+    cliente_direccion = serializers.CharField(source="cliente.direccion", read_only=True)
     compania_nombre = serializers.SerializerMethodField(read_only=True)
     dias_espera_aprobacion = serializers.IntegerField(read_only=True)
     orden_trabajo_resumen = serializers.SerializerMethodField(read_only=True)
@@ -67,14 +76,22 @@ class PresupuestoSerializer(serializers.ModelSerializer):
             "monto_total",
             "id_vehiculo",
             "vehiculo_patente",
+            "vehiculo_marca",
+            "vehiculo_modelo",
+            "vehiculo_anio",
+            "vehiculo_color",
             "vehiculo_detalle",
             "id_cliente",
             "cliente_nombre",
             "cliente_dni",
             "cliente_telefono",
+            "cliente_direccion",
             "id_compania",
             "compania_nombre",
             "observaciones",
+            "detalle_libre",
+            "planilla_marcaciones",
+            "rubros_importes",
             "dias_espera_aprobacion",
             "orden_trabajo_resumen",
             "items",
@@ -138,11 +155,12 @@ class PresupuestoSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        items_data = validated_data.pop("items", [])
+        items_data = validated_data.pop("items", None)
         presupuesto = Presupuesto.objects.create(**validated_data)
-        if items_data:
+        if items_data is not None and len(items_data) > 0:
             sync_budget_items(presupuesto, items_data)
         else:
+            build_items_from_taller_forms(presupuesto)
             recalculate_budget_totals(presupuesto)
         return presupuesto
 
@@ -157,7 +175,16 @@ class PresupuestoSerializer(serializers.ModelSerializer):
             setattr(instance, attr, val)
         instance.save()
 
-        if items_data is not None:
+        if items_data is not None and len(items_data) > 0:
+            sync_budget_items(instance, items_data)
+        elif (
+            "detalle_libre" in validated_data
+            or "planilla_marcaciones" in validated_data
+            or "rubros_importes" in validated_data
+        ):
+            build_items_from_taller_forms(instance)
+            recalculate_budget_totals(instance)
+        elif items_data is not None:
             sync_budget_items(instance, items_data)
         else:
             recalculate_budget_totals(instance)

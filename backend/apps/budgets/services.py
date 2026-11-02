@@ -1,5 +1,9 @@
 """
 Capa de servicios y reglas de negocio para Presupuestos y Apertura de OT (HU-005, HU-006, HU-007).
+Soporta:
+- Anexo 1 (Talonario de texto libre para Terceros / Particulares)
+- Anexo 2 (Planilla de casillas [X] C/R/P por sección y rubros para Compañías Aseguradoras)
+- Carga estructurada de ítems por API
 """
 from datetime import date, timedelta
 from decimal import Decimal
@@ -10,6 +14,15 @@ from apps.workorders.models import FASES_TALLER_DEFINICION, FaseReparacion, Orde
 from .models import ItemPresupuesto, Presupuesto
 
 VALIDEZ_PRESUPUESTO_DIAS = 15
+
+
+def _to_decimal(val) -> Decimal:
+    try:
+        if val in (None, ""):
+            return Decimal("0.00")
+        return Decimal(str(val))
+    except Exception:
+        return Decimal("0.00")
 
 
 def validate_budget_modality_rules(
@@ -38,15 +51,108 @@ def validate_budget_modality_rules(
             )
 
 
+def build_items_from_taller_forms(presupuesto: Presupuesto):
+    """
+    Genera automáticamente los registros de ItemPresupuesto cuando el usuario utiliza:
+    - El formato libre de Terceros/Particulares (Anexo 1: detalle_libre + rubros_importes), o
+    - La planilla de casillas [X] C/R/P de Aseguradoras (Anexo 2: planilla_marcaciones + rubros_importes).
+    """
+    rubros = presupuesto.rubros_importes or {}
+    marcaciones = presupuesto.planilla_marcaciones or {}
+    detalle = (presupuesto.detalle_libre or "").strip()
+
+    if not rubros and not marcaciones and not detalle:
+        return
+
+    presupuesto.items.all().delete()
+
+    if presupuesto.tipo == Presupuesto.Tipo.PARTICULAR:
+        mo_val = _to_decimal(rubros.get("mano_obra", 0))
+        rep_val = _to_decimal(rubros.get("repuestos", 0))
+        resumen_linea = detalle.splitlines()[0][:180] if detalle else "Trabajo de chapa y pintura según detalle"
+
+        if mo_val > Decimal("0.00"):
+            ItemPresupuesto.objects.create(
+                presupuesto=presupuesto,
+                descripcion=resumen_linea,
+                tipo_item=ItemPresupuesto.TipoItem.MANO_OBRA_CHAPA,
+                cantidad=1,
+                precio_unitario=mo_val,
+            )
+        if rep_val > Decimal("0.00"):
+            ItemPresupuesto.objects.create(
+                presupuesto=presupuesto,
+                descripcion="Repuestos y materiales incluidos en cotización particular",
+                tipo_item=ItemPresupuesto.TipoItem.REPUESTO,
+                cantidad=1,
+                precio_unitario=rep_val,
+            )
+    else:
+        # Planilla de Aseguradora: cada casilla marcada con X (C, R, P) se registra para trazabilidad
+        for key, flags in marcaciones.items():
+            if not isinstance(flags, dict):
+                continue
+            acciones = []
+            if flags.get("C"):
+                acciones.append("Cambiar [X]")
+            if flags.get("R"):
+                acciones.append("Reparar [X]")
+            if flags.get("P"):
+                acciones.append("Pintar [X]")
+            nota = (flags.get("nota") or "").strip()
+            if acciones or nota:
+                pieza_label = key.replace("__", " - ")
+                acc_str = ", ".join(acciones)
+                desc = f"{pieza_label}: {acc_str}" + (f" ({nota})" if nota else "")
+                tipo_it = (
+                    ItemPresupuesto.TipoItem.MANO_OBRA_PINTURA
+                    if flags.get("P") and not (flags.get("C") or flags.get("R"))
+                    else ItemPresupuesto.TipoItem.MANO_OBRA_CHAPA
+                )
+                ItemPresupuesto.objects.create(
+                    presupuesto=presupuesto,
+                    descripcion=desc[:200],
+                    tipo_item=tipo_it,
+                    cantidad=1,
+                    precio_unitario=Decimal("0.00"),
+                )
+
+        # Además registramos los montos globales del pie de planilla
+        mo_total_planilla = (
+            _to_decimal(rubros.get("mano_obra", 0))
+            + _to_decimal(rubros.get("pintura", 0))
+            + _to_decimal(rubros.get("mecanica", 0))
+            + _to_decimal(rubros.get("electricidad", 0))
+            + _to_decimal(rubros.get("tapiceria", 0))
+            + _to_decimal(rubros.get("iva", 0))
+        )
+        rep_planilla = _to_decimal(rubros.get("repuestos", 0))
+
+        if mo_total_planilla > Decimal("0.00"):
+            ItemPresupuesto.objects.create(
+                presupuesto=presupuesto,
+                descripcion="Total Mano de Obra / Pintura / Varios según Planilla de Aseguradora",
+                tipo_item=ItemPresupuesto.TipoItem.MANO_OBRA_CHAPA,
+                cantidad=1,
+                precio_unitario=mo_total_planilla,
+            )
+        if rep_planilla > Decimal("0.00"):
+            ItemPresupuesto.objects.create(
+                presupuesto=presupuesto,
+                descripcion="Total Repuestos consignados en Planilla de Aseguradora",
+                tipo_item=ItemPresupuesto.TipoItem.REPUESTO,
+                cantidad=1,
+                precio_unitario=rep_planilla,
+            )
+
+
 @transaction.atomic
 def recalculate_budget_totals(presupuesto: Presupuesto) -> Presupuesto:
     """
     HU-005 Criterio 1 y HU-006 Criterio 2:
-    - Recalcula el subtotal de cada línea (Cantidad * Precio Unitario).
-    - Calcula monto_mano_obra (suma de mano_obra_chapa + mano_obra_pintura).
-    - Si es Particular: suma monto_repuestos y calcula monto_total = monto_mano_obra + monto_repuestos.
-    - Si es Aseguradora: computa dentro de monto_total únicamente la mano de obra (monto_repuestos = 0
-      a cargo de la aseguradora), permitiendo listar piezas de repuesto como referencia técnica.
+    Calcula monto_mano_obra, monto_repuestos y monto_total.
+    Si el presupuesto utiliza rubros_importes de las planillas reales del taller, respeta esos importes;
+    si utiliza ítems individuales por API, suma los ítems.
     """
     items = list(presupuesto.items.all())
     mano_obra = Decimal("0.00")
@@ -66,11 +172,25 @@ def recalculate_budget_totals(presupuesto: Presupuesto) -> Presupuesto:
         elif item.tipo_item == ItemPresupuesto.TipoItem.REPUESTO:
             repuestos += item.subtotal
 
-    presupuesto.monto_mano_obra = mano_obra
-    if presupuesto.tipo == Presupuesto.Tipo.ASEGURADORA:
-        presupuesto.monto_repuestos = Decimal("0.00")
-        presupuesto.monto_total = mano_obra
+    rubros = presupuesto.rubros_importes or {}
+    incluir_repuestos_en_total = bool(rubros.get("incluir_repuestos_en_total", False))
+
+    if presupuesto.tipo == Presupuesto.Tipo.PARTICULAR and rubros.get("total_final") is not None:
+        # En talonario particular puede aplicarse descuento en efectivo (ej.: -10% En Efectivo)
+        presupuesto.monto_mano_obra = _to_decimal(rubros.get("mano_obra", mano_obra))
+        presupuesto.monto_repuestos = _to_decimal(rubros.get("repuestos", repuestos))
+        presupuesto.monto_total = _to_decimal(rubros.get("total_final"))
+    elif presupuesto.tipo == Presupuesto.Tipo.ASEGURADORA:
+        presupuesto.monto_mano_obra = mano_obra
+        if incluir_repuestos_en_total:
+            presupuesto.monto_repuestos = repuestos
+            presupuesto.monto_total = mano_obra + repuestos
+        else:
+            # HU-006 Criterio 2 por defecto: repuestos provistos por la aseguradora = 0 a facturar por mano de obra
+            presupuesto.monto_repuestos = Decimal("0.00")
+            presupuesto.monto_total = mano_obra
     else:
+        presupuesto.monto_mano_obra = mano_obra
         presupuesto.monto_repuestos = repuestos
         presupuesto.monto_total = mano_obra + repuestos
 
@@ -82,7 +202,7 @@ def recalculate_budget_totals(presupuesto: Presupuesto) -> Presupuesto:
 
 @transaction.atomic
 def sync_budget_items(presupuesto: Presupuesto, items_data: list) -> Presupuesto:
-    """Reemplaza la lista de ítems de un presupuesto en borrador y recalcula totales."""
+    """Reemplaza la lista de ítems de un presupuesto en borrador/emitido y recalcula totales."""
     if presupuesto.estado not in (Presupuesto.Estado.BORRADOR, Presupuesto.Estado.EMITIDO):
         raise ValidationError(
             "Solo se pueden modificar los ítems de un presupuesto en estado Borrador o Emitido."
@@ -131,8 +251,8 @@ def emitir_presupuesto(presupuesto: Presupuesto) -> Presupuesto:
 
     if presupuesto.items.count() == 0 or presupuesto.monto_total <= Decimal("0.00"):
         raise ValidationError(
-            "No se puede emitir un presupuesto sin ítems o con importe total en cero. "
-            "Incorpore al menos un ítem valorizado."
+            "No se puede emitir un presupuesto sin detalle o con importe total en cero. "
+            "Ingrese el detalle e importe de la cotización."
         )
 
     hoy = date.today()
@@ -162,7 +282,7 @@ def aprobar_presupuesto_y_crear_ot(
     """
     HU-007 Criterios 1, 2 y 3:
     1. Valida relación 1:1 (bloquea si ya tiene OT o si está Rechazado/Vencido).
-    2. Exige que el presupuesto esté en estado "emitido" (si estaba en borrador con ítems válidos, requiere emisión previa).
+    2. Exige que el presupuesto esté en estado "emitido".
     3. Cambia estado del presupuesto a "aprobado".
     4. Crea automáticamente la OrdenDeTrabajo con saldo_pendiente = monto_total.
     5. Inicializa en FaseReparacion las 8 fases operativas del taller ordenadas secuencialmente del 1 al 8.

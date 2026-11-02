@@ -46,18 +46,17 @@ Este documento registra paso a paso todo lo construido en cada Sprint, vinculand
 
 ## Sprint 2: Presupuestos y Apertura Automática de Orden de Trabajo (`HU-005` a `HU-007`)
 
-### `HU-005`: Confección y emisión de presupuestos para particulares
-- **Tablas en PostgreSQL:** `presupuesto` (Tabla 13) e `item_presupuesto` (Tabla 14).
-- **Reglas de negocio implementadas (`backend/apps/budgets/`):**
-  1. **Recálculo dinámico de subtotales:** En `recalculate_budget_totals` (`services.py`), cada renglón calcula `subtotal = cantidad * precio_unitario`, suma `monto_mano_obra` (`mano_obra_chapa` + `mano_obra_pintura`), suma `monto_repuestos` (`repuesto`) y calcula `monto_total = monto_mano_obra + monto_repuestos`.
-  2. **Bloqueo de emisión en cero o sin ítems:** En `emitir_presupuesto` (`services.py`), si el presupuesto no tiene ítems cargados o su `monto_total <= 0`, rechaza el cambio a estado `"emitido"`.
-  3. **Validez de 15 días y vista imprimible/PDF:** Al emitirse formalmente, asigna `estado = "emitido"`, `fecha_emision = date.today()`, `fecha_vencimiento = date.today() + timedelta(days=15)` y habilita el comprobante imprimible en `BudgetPrintModal.jsx`.
+### `HU-005`: Confección y emisión de presupuestos para particulares (Anexo 1 – Talonario Libre)
+- **Tablas en PostgreSQL:** `presupuesto` (Tabla 13, incluyendo `detalle_libre` y `rubros_importes`) e `item_presupuesto` (Tabla 14).
+- **Formato Real de Taller Sergio (`ParticularSheetEditor.jsx`):**
+  1. **Editor estilo Talonario / Hoja de Word con renglones:** Replica el talonario físico de *SERGIO Carrocería y Pintura* (`Boedo 1627 esq. Agustín Garzón - B° 1° de Mayo - Córdoba`, `Tel.: (0351) 455 9798 - Cel.: (0351) 152 165277`) permitiendo redactar libremente las tareas (ej.: `Corsa AA 467 SL / Puerta Del/Izq Pintar y Colocar / M/O = $ 600.000 / -10% En Efectivo (Billete) $ 540.000`).
+  2. **Cálculo de Mano de Obra, Repuestos y Descuento Efectivo:** Sincroniza el importe acordado con la base de datos para generar la `OrdenDeTrabajo` y la validez de $+15\text{ días}$.
 
-### `HU-006`: Confección y emisión de presupuestos para aseguradoras
-- **Reglas de negocio implementadas (`backend/apps/budgets/services.py`):**
-  1. **Campos periciales obligatorios:** En `validate_budget_modality_rules`, cuando `tipo == "aseguradora"` exige seleccionar `compania`, `nro_siniestro` y `nombre_perito`.
-  2. **Exclusión de repuestos provistos por el seguro:** En `recalculate_budget_totals`, cuando `tipo == "aseguradora"`, fija `monto_repuestos = 0.00` y computa dentro de `monto_total` únicamente la mano de obra de chapa y pintura, permitiendo listar las piezas como referencia técnica para la recepción.
-  3. **Seguimiento de días a la espera del perito:** Propiedad calculada `dias_espera_aprobacion` expuesta en la tabla principal de `BudgetsPage.jsx`.
+### `HU-006`: Confección y emisión de presupuestos para aseguradoras (Anexo 2 – Planilla de Casillas `[X]`)
+- **Formato Real de Taller Sergio (`AseguradoraGridEditor.jsx` y `aseguradoraPlanillaCatalog.js`):**
+  1. **Grilla oficial de 3 columnas y 9 secciones con casillas `[X]`:** Incluye las 9 secciones exactas del formulario físico (*Parte Delantera*, *Parte Trasera*, *Motor*, *Lado Izquierdo*, *Lado Derecho*, *Chasis*, *Tren Delantero*, *Interior* y *Tren Trasero*), donde cada pieza tiene cuadraditos clicables para marcar con una **`X`** en **`C` (Cambiar)**, **`R` (Reparar)** y **`P` (Pintar)**.
+  2. **Recuadro oficial de importes al pie de Columna 3:** Permite cargar `MANO DE OBRA $`, `PINTURA $`, `MECÁNICA $`, `ELECTRICIDAD $`, `TAPICERÍA $`, `REPUESTOS $` e `I.V.A. $`, calculando automáticamente el `TOTAL $` e imprimiendo la planilla completa con el sello de *Taller Sergio – Pablo Martín*.
+  3. **Campos periciales obligatorios:** Exige seleccionar `compania`, `nro_siniestro` y `nombre_perito`, y calcula `dias_espera_aprobacion`.
 
 ### `HU-007`: Aprobación o rechazo de presupuestos y generación automática de Orden de Trabajo
 - **Tablas en PostgreSQL:** `orden_de_trabajo` (Tabla 15) y `fase_reparacion` (Tabla 16) en `backend/apps/workorders/models.py`.
