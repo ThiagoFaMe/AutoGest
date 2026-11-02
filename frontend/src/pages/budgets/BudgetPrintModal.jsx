@@ -32,6 +32,10 @@ export default function BudgetPrintModal({ budget, onClose }) {
 
   const marcaciones = budget.planilla_marcaciones || {};
   const rubros = budget.rubros_importes || {};
+  const cab = rubros.cabecera_planilla || {};
+  const printDia = cab.fecha_dia || dia;
+  const printMes = cab.fecha_mes || mes;
+  const printAnio = cab.fecha_anio || anio;
 
   return (
     <div className="modal d-block" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
@@ -162,102 +166,138 @@ export default function BudgetPrintModal({ budget, onClose }) {
                  ===================================================================== */
               <div className="border border-2 border-dark p-3">
                 {/* Encabezado idéntico a la planilla preimpresa de Taller Sergio */}
-                <div className="row g-2 align-items-center border-bottom border-2 border-dark pb-2 mb-2">
-                  <div className="col-md-6 d-flex align-items-center gap-3">
-                    <div>
-                      <div
-                        style={{
-                          fontSize: "2.2rem",
-                          fontWeight: 900,
-                          fontStyle: "italic",
-                          lineHeight: 1,
-                        }}
-                      >
-                        SERGIO
+                <div
+                  className="border border-2 border-dark px-3 py-2 mb-2"
+                  style={{ borderRadius: "14px" }}
+                >
+                  <div className="row g-2 align-items-center">
+                    <div className="col-6 d-flex align-items-center gap-3">
+                      <div className="text-center">
+                        <div
+                          style={{
+                            fontSize: "2.2rem",
+                            fontWeight: 900,
+                            fontStyle: "italic",
+                            lineHeight: 1,
+                          }}
+                        >
+                          SERGIO
+                        </div>
+                        <div className="bg-dark text-white px-2 small fw-bold">
+                          CARROCERÍA Y PINTURA
+                        </div>
+                        <div className="small fst-italic">
+                          De Martín Pablo César
+                        </div>
                       </div>
-                      <div className="bg-dark text-white px-2 small fw-bold">
-                        CARROCERÍA Y PINTURA
-                      </div>
-                      <div className="small fst-italic">
-                        De Martín Pablo César
+                      <div style={{ fontSize: "0.75rem" }}>
+                        <div>Boedo 1627 esq. Agustín Garzón</div>
+                        <div>B° 1° de Mayo - Córdoba</div>
+                        <div className="fw-bold">CEL.: (0351) 152165277</div>
+                        <div>martin-pablo@outlook.com.ar</div>
+                        <div>tallersergio1627@gmail.com</div>
                       </div>
                     </div>
-                    <div style={{ fontSize: "0.75rem" }}>
-                      <div>Boedo 1627 esq. Agustín Garzón</div>
-                      <div>B° 1° de Mayo - Córdoba</div>
-                      <div className="fw-bold">CEL.: (0351) 152165277</div>
-                      <div>martin-pablo@outlook.com.ar</div>
-                      <div>tallersergio1627@gmail.com</div>
-                    </div>
-                  </div>
 
-                  <div className="col-md-2 text-center">
-                    <div className="border border-2 border-dark d-inline-block px-3 py-1 fw-black fs-4">
-                      X
+                    <div className="col-2 text-center d-flex flex-column align-items-center">
+                      <div className="border border-2 border-dark d-inline-block px-3 py-1 fw-black fs-4">
+                        X
+                      </div>
+                      <div style={{ fontSize: "0.62rem", lineHeight: "0.72rem" }}>
+                        <div>Documento</div>
+                        <div>No Válido</div>
+                        <div>como</div>
+                        <div>Factura</div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: "0.65rem" }}>
-                      Documento no Válido como Factura
-                    </div>
-                  </div>
 
-                  <div className="col-md-4 text-end">
-                    <div className="fw-bold">
-                      PRESUPUESTO N°:{" "}
-                      {String(budget.id_presupuesto).padStart(4, "0")}
-                    </div>
-                    <div className="d-inline-flex gap-1 my-1">
-                      <span className="border border-dark px-2 py-1 fw-bold">
-                        {dia}
-                      </span>
-                      <span className="border border-dark px-2 py-1 fw-bold">
-                        {mes}
-                      </span>
-                      <span className="border border-dark px-2 py-1 fw-bold">
-                        {anio}
-                      </span>
-                    </div>
-                    <div className="small">
-                      <strong>Aseguradora:</strong> {budget.compania_nombre} |{" "}
-                      <strong>Siniestro:</strong> {budget.nro_siniestro}
+                    <div className="col-4 text-center">
+                      <div className="fw-bold">
+                        PRESUPUESTO N°:{" "}
+                        {String(budget.id_presupuesto).padStart(4, "0")}
+                      </div>
+                      <div className="d-inline-flex gap-1 my-1">
+                        <span className="border border-2 border-dark px-2 py-1 fw-bold">
+                          {printDia}
+                        </span>
+                        <span className="border border-2 border-dark px-2 py-1 fw-bold">
+                          {printMes}
+                        </span>
+                        <span className="border border-2 border-dark px-2 py-1 fw-bold">
+                          {printAnio}
+                        </span>
+                      </div>
+                      <div className="small fw-semibold">FECHA:</div>
                     </div>
                   </div>
                 </div>
 
-                {/* Datos de filiación del Cliente y Vehículo */}
+                {/* Datos de filiación del Cliente y Vehículo con líneas punteadas */}
                 <div
                   className="border-bottom border-2 border-dark pb-2 mb-2"
                   style={{ fontSize: "0.82rem" }}
                 >
-                  <div className="row g-2">
-                    <div className="col-md-8">
+                  <div className="row g-2 mb-1">
+                    <div className="col-8">
                       <strong>APELLIDO Y NOMBRE:</strong>{" "}
-                      <span className="text-uppercase">
-                        {budget.cliente_nombre}
+                      <span
+                        className="text-uppercase fw-semibold"
+                        style={{ borderBottom: "1px dotted #000" }}
+                      >
+                        {cab.apellido_nombre || budget.cliente_nombre}
                       </span>
                     </div>
-                    <div className="col-md-4">
-                      <strong>TEL.:</strong> {budget.cliente_telefono}
+                    <div className="col-4">
+                      <strong>TEL.:</strong>{" "}
+                      <span style={{ borderBottom: "1px dotted #000" }}>
+                        {cab.telefono_1 || budget.cliente_telefono}
+                      </span>
                     </div>
-                    <div className="col-md-8">
+                  </div>
+                  <div className="row g-2 mb-1">
+                    <div className="col-8">
                       <strong>DOMICILIO:</strong>{" "}
-                      {budget.cliente_direccion || "Córdoba Capital"}
+                      <span style={{ borderBottom: "1px dotted #000" }}>
+                        {cab.domicilio ||
+                          budget.cliente_direccion ||
+                          "Córdoba Capital"}
+                      </span>
                     </div>
-                    <div className="col-md-4">
-                      <strong>PERITO:</strong> {budget.nombre_perito}
+                    <div className="col-4">
+                      <strong>TEL.:</strong>{" "}
+                      <span style={{ borderBottom: "1px dotted #000" }}>
+                        {cab.telefono_2 || "—"}
+                      </span>
                     </div>
-                    <div className="col-md-4">
-                      <strong>VEHÍCULO:</strong> {budget.vehiculo_marca}{" "}
-                      {budget.vehiculo_modelo}
+                  </div>
+                  <div className="row g-2">
+                    <div className="col-4">
+                      <strong>VEHÍCULO:</strong>{" "}
+                      <span style={{ borderBottom: "1px dotted #000" }}>
+                        {cab.vehiculo_texto ||
+                          `${budget.vehiculo_marca} ${budget.vehiculo_modelo}`}
+                      </span>
                     </div>
-                    <div className="col-md-3">
-                      <strong>COLOR:</strong> {budget.vehiculo_color}
+                    <div className="col-3">
+                      <strong>COLOR:</strong>{" "}
+                      <span style={{ borderBottom: "1px dotted #000" }}>
+                        {cab.color_texto || budget.vehiculo_color}
+                      </span>
                     </div>
-                    <div className="col-md-2">
-                      <strong>MODELO:</strong> {budget.vehiculo_anio}
+                    <div className="col-2">
+                      <strong>MODELO:</strong>{" "}
+                      <span style={{ borderBottom: "1px dotted #000" }}>
+                        {cab.modelo_anio || budget.vehiculo_anio}
+                      </span>
                     </div>
-                    <div className="col-md-3">
+                    <div className="col-3">
                       <strong>DOMINIO:</strong>{" "}
-                      <span className="fw-bold">{budget.vehiculo_patente}</span>
+                      <span
+                        className="fw-bold"
+                        style={{ borderBottom: "1px dotted #000" }}
+                      >
+                        {cab.dominio_patente || budget.vehiculo_patente}
+                      </span>
                     </div>
                   </div>
                 </div>

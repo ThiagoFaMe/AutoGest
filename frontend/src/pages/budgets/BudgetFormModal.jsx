@@ -45,6 +45,36 @@ export default function BudgetFormModal({
     editingBudget?.planilla_marcaciones || {}
   );
 
+  // Inicialización de datos de cabecera de la planilla física (APELLIDO Y NOMBRE, TEL., DOMICILIO, VEHÍCULO, COLOR, MODELO, DOMINIO)
+  const buildCabeceraFromIds = (cliId, vehId) => {
+    const cli = clientes.find((c) => String(c.id_cliente) === String(cliId));
+    const veh = vehiculos.find((v) => String(v.id_vehiculo) === String(vehId));
+    const hoy = new Date();
+    return {
+      fecha_dia: String(hoy.getDate()).padStart(2, "0"),
+      fecha_mes: String(hoy.getMonth() + 1).padStart(2, "0"),
+      fecha_anio: String(hoy.getFullYear()).slice(-2),
+      apellido_nombre: cli ? `${cli.apellido} ${cli.nombre}`.toUpperCase() : "",
+      telefono_1: cli?.telefono || "",
+      domicilio: cli?.direccion || "",
+      telefono_2: "",
+      vehiculo_texto: veh ? `${veh.marca} ${veh.modelo}` : "",
+      color_texto: veh?.color || "",
+      modelo_anio: veh ? String(veh.anio) : "",
+      dominio_patente: veh?.patente || "",
+    };
+  };
+
+  const [datosCabeceraPlanilla, setDatosCabeceraPlanilla] = useState(() => {
+    if (editingBudget?.rubros_importes?.cabecera_planilla) {
+      return editingBudget.rubros_importes.cabecera_planilla;
+    }
+    return buildCabeceraFromIds(
+      editingBudget?.id_cliente || clientes[0]?.id_cliente,
+      editingBudget?.id_vehiculo || vehiculos[0]?.id_vehiculo
+    );
+  });
+
   // Importes por rubro (tanto para Particular como para el pie de Planilla de Aseguradora)
   const [rubrosImportes, setRubrosImportes] = useState(() => {
     if (
@@ -79,10 +109,19 @@ export default function BudgetFormModal({
 
   const handleVehiculoChange = (vehId) => {
     setIdVehiculo(vehId);
-    const found = vehiculos.find((v) => String(v.id_vehiculo) === String(vehId));
-    if (found) {
-      setIdCliente(found.id_cliente);
+    const foundVeh = vehiculos.find(
+      (v) => String(v.id_vehiculo) === String(vehId)
+    );
+    const nextCliId = foundVeh ? foundVeh.id_cliente : idCliente;
+    if (foundVeh) {
+      setIdCliente(foundVeh.id_cliente);
     }
+    setDatosCabeceraPlanilla(buildCabeceraFromIds(nextCliId, vehId));
+  };
+
+  const handleClienteChange = (cliId) => {
+    setIdCliente(cliId);
+    setDatosCabeceraPlanilla(buildCabeceraFromIds(cliId, idVehiculo));
   };
 
   const handleSave = async (emitirAhora = false) => {
@@ -99,7 +138,10 @@ export default function BudgetFormModal({
         observaciones: observaciones.trim(),
         detalle_libre: tipo === "particular" ? detalleLibre : "",
         planilla_marcaciones: tipo === "aseguradora" ? marcaciones : {},
-        rubros_importes: rubrosImportes,
+        rubros_importes: {
+          ...rubrosImportes,
+          cabecera_planilla: datosCabeceraPlanilla,
+        },
       };
 
       let saved;
@@ -156,8 +198,8 @@ export default function BudgetFormModal({
               <div className="alert alert-danger small">{errorMsg}</div>
             )}
 
-            {/* Cabecera: Selector de Modalidad (Talonario Terceros vs Planilla Aseguradoras) */}
-            <div className="row g-3 mb-3 pb-3 border-bottom">
+            {/* Barra de selección rápida de Formato y Vínculo con Base de Datos */}
+            <div className="row g-3 mb-3 pb-3 border-bottom align-items-end">
               <div className="col-md-4">
                 <label className="form-label small fw-bold">
                   Formato de Presupuesto *
@@ -165,7 +207,7 @@ export default function BudgetFormModal({
                 <div className="btn-group w-100" role="group">
                   <button
                     type="button"
-                    className={`btn ${
+                    className={`btn btn-sm ${
                       tipo === "particular"
                         ? "btn-primary fw-semibold"
                         : "btn-outline-primary"
@@ -173,11 +215,11 @@ export default function BudgetFormModal({
                     onClick={() => setTipo("particular")}
                   >
                     <i className="bi bi-journal-text me-1"></i>
-                    Terceros / Particular (Texto Libre)
+                    Terceros / Particular
                   </button>
                   <button
                     type="button"
-                    className={`btn ${
+                    className={`btn btn-sm ${
                       tipo === "aseguradora"
                         ? "btn-primary fw-semibold"
                         : "btn-outline-primary"
@@ -185,17 +227,17 @@ export default function BudgetFormModal({
                     onClick={() => setTipo("aseguradora")}
                   >
                     <i className="bi bi-grid-3x3-gap-fill me-1"></i>
-                    Planilla Aseguradora (Casillas [X])
+                    Compañía Aseguradora
                   </button>
                 </div>
               </div>
 
               <div className="col-md-4">
                 <label className="form-label small fw-bold">
-                  Vehículo / Dominio *
+                  Autocompletar desde Vehículo Registrado *
                 </label>
                 <select
-                  className="form-select"
+                  className="form-select form-select-sm"
                   value={idVehiculo}
                   onChange={(e) => handleVehiculoChange(e.target.value)}
                   required
@@ -210,12 +252,12 @@ export default function BudgetFormModal({
 
               <div className="col-md-4">
                 <label className="form-label small fw-bold">
-                  Apellido y Nombre del Cliente *
+                  Cliente Vinculado en Padrón *
                 </label>
                 <select
-                  className="form-select"
+                  className="form-select form-select-sm"
                   value={idCliente}
-                  onChange={(e) => setIdCliente(e.target.value)}
+                  onChange={(e) => handleClienteChange(e.target.value)}
                   required
                 >
                   {clientes.map((c) => (
@@ -227,12 +269,12 @@ export default function BudgetFormModal({
               </div>
             </div>
 
-            {/* Si es Aseguradora, pide Compañía, Siniestro y Perito arriba de la Planilla C/R/P */}
+            {/* Datos de Compañía Aseguradora, Siniestro y Perito (HU-006) */}
             {tipo === "aseguradora" && (
-              <div className="p-3 mb-3 rounded border border-primary bg-primary-subtle">
-                <div className="row g-3">
+              <div className="px-3 py-2 mb-3 rounded border bg-light">
+                <div className="row g-2 align-items-center">
                   <div className="col-md-4">
-                    <label className="form-label small fw-bold">
+                    <label className="form-label small fw-bold mb-1">
                       Compañía Aseguradora *
                     </label>
                     <select
@@ -249,7 +291,7 @@ export default function BudgetFormModal({
                     </select>
                   </div>
                   <div className="col-md-4">
-                    <label className="form-label small fw-bold">
+                    <label className="form-label small fw-bold mb-1">
                       Número de Siniestro *
                     </label>
                     <input
@@ -262,7 +304,7 @@ export default function BudgetFormModal({
                     />
                   </div>
                   <div className="col-md-4">
-                    <label className="form-label small fw-bold">
+                    <label className="form-label small fw-bold mb-1">
                       Perito Liquidador *
                     </label>
                     <input
@@ -278,7 +320,7 @@ export default function BudgetFormModal({
               </div>
             )}
 
-            {/* Cuerpo dinámico según el tipo de presupuesto elegido */}
+            {/* Cuerpo dinámico: Talonario de Terceros vs Planilla Completa de Aseguradora */}
             {tipo === "particular" ? (
               <ParticularSheetEditor
                 selectedVehiculo={selectedVehiculo}
@@ -290,6 +332,9 @@ export default function BudgetFormModal({
               />
             ) : (
               <AseguradoraGridEditor
+                presupuestoNumero={editingBudget?.id_presupuesto}
+                datosCabeceraPlanilla={datosCabeceraPlanilla}
+                setDatosCabeceraPlanilla={setDatosCabeceraPlanilla}
                 marcaciones={marcaciones}
                 setMarcaciones={setMarcaciones}
                 rubrosImportes={rubrosImportes}
