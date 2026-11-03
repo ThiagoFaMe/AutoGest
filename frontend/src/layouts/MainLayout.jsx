@@ -34,10 +34,19 @@ export default function MainLayout() {
         </div>
 
         <div className="px-2 mb-2 text-uppercase text-secondary small fw-semibold">
-          Sprint 1 • Padrones y Acceso
+          Sprint 3 • Taller y Planta
         </div>
 
         <nav className="nav flex-column gap-1 flex-grow-1">
+          <NavLink to="/ordenes" className="autogest-nav-link">
+            <i className="bi bi-wrench-adjustable-circle-fill"></i>
+            <span>Órdenes en Planta (HU-008..009)</span>
+          </NavLink>
+
+          <div className="px-2 mt-3 mb-1 text-uppercase text-secondary small fw-semibold">
+            Sprint 1 • Padrones y Acceso
+          </div>
+
           <NavLink to="/clientes" className="autogest-nav-link">
             <i className="bi bi-people-fill"></i>
             <span>Clientes (HU-002)</span>

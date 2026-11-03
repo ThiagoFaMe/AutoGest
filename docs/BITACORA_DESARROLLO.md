@@ -65,3 +65,24 @@ Este documento registra paso a paso todo lo construido en cada Sprint, vinculand
   2. **Inicialización automática de las 8 fases operativas:** Genera en `FaseReparacion` las 8 etapas secuenciales del 1 al 8 (`1-Recepción`, `2-Desarme`, `3-Chapa`, `4-Preparación`, `5-Pintura`, `6-Armado`, `7-Pulido`, `8-Alistado para entrega`).
   3. **Relación unívoca 1 a 1 (`OneToOneField`):** Bloquea cualquier intento de generar más de una orden sobre el mismo presupuesto o sobre presupuestos rechazados/vencidos.
 
+---
+
+## Sprint 3: Seguimiento Secuencial de Taller y Línea de Tiempo (`HU-008` y `HU-009`)
+
+### `HU-008`: Registro y control de avance secuencial de fases de reparación
+- **Tablas en PostgreSQL:** `orden_de_trabajo` (Tabla 15) y `fase_reparacion` (Tabla 16).
+- **Reglas de negocio implementadas (`backend/apps/workorders/services.py`):**
+  1. **Precedencia secuencial estricta ($n - 1$):** Tanto en `iniciar_fase_reparacion` como en `completar_fase_reparacion`, el sistema verifica que todas las fases con `numero_secuencia < n` estén en estado `"completada"`. Si un operario intenta saltar una etapa (ej.: iniciar `3-Chapa` o `5-Pintura` sin que las previas estén cerradas), el backend rechaza la petición con `HTTP 400 Bad Request` indicando exactamente qué fase previa falta finalizar.
+  2. **Trazabilidad automática de marcas de tiempo y responsable:** Al completar la fase $n$, se registra `fecha_fin = timezone.now()`, `id_usuario_responsable = request.user` y se inicia automáticamente la fase $n + 1$ (`estado = "en_curso"`, `fecha_inicio = timezone.now()`), actualizando `OrdenDeTrabajo.estado_actual`.
+  3. **Cierre técnico y entrega efectiva:** Al completarse la fase 8 (`Alistado para entrega`), `OrdenDeTrabajo.estado_actual` pasa a `"Lista para entrega"`. Cuando Administración o el Dueño registra el retiro (`registrar_entrega_vehiculo`), se fija `fecha_entrega_real` y el estado pasa a `"Entregada"`.
+
+### `HU-009`: Consulta integral del estado, tiempos y línea de tiempo de reparación
+- **Archivos de Backend y Frontend:**
+  - `backend/apps/workorders/services.py` (`calculate_phase_duration`, `calculate_order_timing_metrics`) y `serializers.py` (`OrdenDeTrabajoSerializer`, `ConsultaPublicaOrdenSerializer`).
+  - `frontend/src/pages/workorders/WorkOrdersPage.jsx`, `WorkOrderDetailModal.jsx` (Prototipo 2 del TFG) y `PublicTrackingPage.jsx`.
+- **Reglas de negocio implementadas:**
+  1. **Línea de tiempo de 10 etapas (Prototipo 2):** Muestra las 2 fases administrativas previas certificadas (*Armado de presupuesto* y *Aprobación de presupuesto*) seguidas de las 8 fases operativas de taller con sus fechas/horas de inicio y fin, tiempo empleado en horas/minutos (`duracion_texto`) y nombre del operario que certificó.
+  2. **Detección automática de retraso:** Si la orden sigue abierta (`fecha_entrega_real is None`) y `date.today() > fecha_estimada_entrega`, calcula `en_retraso = True` y `dias_retraso`, resaltando la tarjeta en rojo en el tablero de planta.
+  3. **Seguridad RBAC (Tabla 21):** Cuando consulta un usuario con rol `operario`, el serializador enmascara `monto_total` y `saldo_pendiente` (`None`). Además, expone el portal público `/seguimiento` (`GET /api/workorders/seguimiento/<codigo>/`) para consulta externa por código (`OT-2026-001`) o patente sin exponer datos sensibles.
+
+

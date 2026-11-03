@@ -8,6 +8,8 @@ import ClientsPage from "./pages/clients/ClientsPage";
 import InsurersPage from "./pages/insurers/InsurersPage";
 import UsersPage from "./pages/users/UsersPage";
 import VehiclesPage from "./pages/vehicles/VehiclesPage";
+import PublicTrackingPage from "./pages/workorders/PublicTrackingPage";
+import WorkOrdersPage from "./pages/workorders/WorkOrdersPage";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user } = useAuth();
@@ -15,7 +17,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/login" replace />;
   }
   if (allowedRoles && !allowedRoles.includes(user.rol)) {
-    return <Navigate to="/clientes" replace />;
+    return <Navigate to="/ordenes" replace />;
   }
   return children;
 };
@@ -26,6 +28,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/seguimiento" element={<PublicTrackingPage />} />
           <Route
             path="/"
             element={
@@ -34,7 +37,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/clientes" replace />} />
+            <Route index element={<Navigate to="/ordenes" replace />} />
+            <Route path="ordenes" element={<WorkOrdersPage />} />
             <Route path="clientes" element={<ClientsPage />} />
             <Route path="vehiculos" element={<VehiclesPage />} />
             <Route

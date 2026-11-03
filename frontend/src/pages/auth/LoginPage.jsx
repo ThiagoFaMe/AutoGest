@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 export default function LoginPage() {
@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/clientes");
+      navigate("/ordenes");
     } catch (err) {
       const detail =
         err.response?.data?.detail ||
@@ -141,6 +141,16 @@ export default function LoginPage() {
                 </span>
                 <span className="badge bg-warning text-dark">Operario</span>
               </button>
+            </div>
+
+            <div className="mt-3 pt-3 border-top text-center">
+              <Link
+                to="/seguimiento"
+                className="btn btn-outline-primary btn-sm w-100 fw-semibold"
+              >
+                <i className="bi bi-search me-1"></i>
+                Portal Público: Consultar Estado de mi Vehículo
+              </Link>
             </div>
           </div>
         </div>

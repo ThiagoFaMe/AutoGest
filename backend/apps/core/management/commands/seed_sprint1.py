@@ -286,4 +286,98 @@ class Command(BaseCommand):
                 recalculate_budget_totals(p3)
                 emitir_presupuesto(p3)
 
-        self.stdout.write(self.style.SUCCESS("Semilla del Sprint 1 y Sprint 2 aplicada exitosamente."))
+        # Semilla de Avance de Fases para Sprint 3 (HU-008 y HU-009)
+        from django.utils import timezone
+        from apps.workorders.models import FaseReparacion, OrdenDeTrabajo
+
+        u_laura = Usuario.objects.filter(email="administracion@tallersergio.com.ar").first()
+        u_carlos = Usuario.objects.filter(email="chapa@tallersergio.com.ar").first()
+        u_martin = Usuario.objects.filter(email="pintura@tallersergio.com.ar").first()
+
+        ot1 = OrdenDeTrabajo.objects.order_by("id_orden").first()
+        if ot1 and ot1.fases.filter(estado="completada").count() == 0:
+            now = timezone.now()
+            f1 = ot1.fases.filter(numero_secuencia=1).first()
+            f2 = ot1.fases.filter(numero_secuencia=2).first()
+            f3 = ot1.fases.filter(numero_secuencia=3).first()
+            f4 = ot1.fases.filter(numero_secuencia=4).first()
+            if f1 and f2 and f3 and f4:
+                f1.estado = FaseReparacion.EstadoFase.COMPLETADA
+                f1.fecha_inicio = now - timedelta(days=3, hours=6)
+                f1.fecha_fin = now - timedelta(days=3, hours=4)
+                f1.usuario_responsable = u_laura
+                f1.observaciones = "Recepción de unidad y verificación de guardabarros enviado por Sancor."
+                f1.save()
+
+                f2.estado = FaseReparacion.EstadoFase.COMPLETADA
+                f2.fecha_inicio = now - timedelta(days=3, hours=4)
+                f2.fecha_fin = now - timedelta(days=2, hours=5)
+                f2.usuario_responsable = u_carlos
+                f2.observaciones = "Desmontaje de paragolpes, óptica derecha y panel interior de puerta."
+                f2.save()
+
+                f3.estado = FaseReparacion.EstadoFase.COMPLETADA
+                f3.fecha_inicio = now - timedelta(days=2, hours=5)
+                f3.fecha_fin = now - timedelta(days=1, hours=2)
+                f3.usuario_responsable = u_carlos
+                f3.observaciones = "Reemplazo de guardabarros y escuadrado de holguras de puerta."
+                f3.save()
+
+                f4.estado = FaseReparacion.EstadoFase.EN_CURSO
+                f4.fecha_inicio = now - timedelta(days=1, hours=2)
+                f4.usuario_responsable = u_martin
+                f4.observaciones = "Enmasillado poliéster y lijado escalonado en sector Pintura."
+                f4.save()
+
+                ot1.estado_actual = f4.nombre_fase
+                ot1.save(update_fields=["estado_actual"])
+
+        # Segunda Orden de Trabajo con alerta de demora activa para demostrar HU-009 Criterio 2
+        v_208 = Vehiculo.objects.filter(patente="AD309TR").first()
+        if v_208 and OrdenDeTrabajo.objects.count() < 2:
+            p4 = Presupuesto.objects.create(
+                tipo=Presupuesto.Tipo.PARTICULAR,
+                vehiculo=v_208,
+                cliente=v_208.cliente,
+                detalle_libre=(
+                    "Peugeot 208   AD 309 TR\n"
+                    "Portón trasero y paragolpes Rep y Pintar.\n"
+                    "M/O = $ 650.000"
+                ),
+                rubros_importes={"mano_obra": 650000, "total_final": 650000},
+                observaciones="Reparación particular de portón trasero.",
+            )
+            build_items_from_taller_forms(p4)
+            recalculate_budget_totals(p4)
+            emitir_presupuesto(p4)
+            ot2 = aprobar_presupuesto_y_crear_ot(
+                presupuesto=p4,
+                fecha_ingreso=date.today() - timedelta(days=9),
+                fecha_estimada_entrega=date.today() - timedelta(days=2),
+            )
+            now = timezone.now()
+            for seq, hrs_ago_start, hrs_ago_end, resp, obs in [
+                (1, 190, 185, u_laura, "Unidad ingresada al taller."),
+                (2, 185, 160, u_carlos, "Desarme de portón trasero y faros."),
+                (3, 160, 110, u_carlos, "Desabolladura de panel de cola."),
+                (4, 110, 60, u_martin, "Imprimación aparejo alto sólido."),
+            ]:
+                f = ot2.fases.filter(numero_secuencia=seq).first()
+                if f:
+                    f.estado = FaseReparacion.EstadoFase.COMPLETADA
+                    f.fecha_inicio = now - timedelta(hours=hrs_ago_start)
+                    f.fecha_fin = now - timedelta(hours=hrs_ago_end)
+                    f.usuario_responsable = resp
+                    f.observaciones = obs
+                    f.save()
+            f5 = ot2.fases.filter(numero_secuencia=5).first()
+            if f5:
+                f5.estado = FaseReparacion.EstadoFase.EN_CURSO
+                f5.fecha_inicio = now - timedelta(hours=60)
+                f5.usuario_responsable = u_martin
+                f5.observaciones = "Aplicación de base Azul Quasar (KHK) y barniz en cabina."
+                f5.save()
+                ot2.estado_actual = f5.nombre_fase
+                ot2.save(update_fields=["estado_actual"])
+
+        self.stdout.write(self.style.SUCCESS("Semilla de Sprints 1, 2 y 3 aplicada exitosamente."))
