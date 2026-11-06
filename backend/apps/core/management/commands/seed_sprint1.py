@@ -487,6 +487,74 @@ class Command(BaseCommand):
                     observacion_comprobante="Imprimación portón trasero Peugeot 208",
                 )
 
+        # Semilla de Cuentas por Cobrar, Flujo de Caja y KPIs para Sprint 5 (HU-013 y HU-014)
+        from apps.finance.models import CuentaPorCobrar, MovimientoFinanciero
+        from apps.finance.services import (
+            emitir_factura_cuenta_por_cobrar,
+            registrar_movimiento_financiero,
+        )
+
+        if CuentaPorCobrar.objects.count() == 0 and ot1 and u_laura:
+            # 1) Factura de OT-2026-001 (Sancor Seguros - emitida hace 42 días -> vencida hace 12 días -> EN MORA)
+            c1 = emitir_factura_cuenta_por_cobrar(
+                orden=ot1,
+                nro_factura="FAC-A-0001-00148",
+                fecha_emision=date.today() - timedelta(days=42),
+                monto_facturado=ot1.monto_total,
+            )
+            # Imputamos un pago parcial a cuenta de Sancor para demostrar saldo pendiente en mora
+            registrar_movimiento_financiero(
+                tipo=MovimientoFinanciero.TipoFlujo.INGRESO,
+                categoria="Liquidación Aseguradora",
+                concepto="Anticipo transferencia Sancor Factura FAC-A-0001-00148",
+                monto=Decimal("1380000.00"),
+                medio_pago=MovimientoFinanciero.MedioPago.TRANSFERENCIA,
+                usuario=u_laura,
+                fecha=date.today() - timedelta(days=15),
+                cuenta=c1,
+            )
+
+            # 2) Segunda factura en plazo (emitida hace 5 días)
+            if ot2:
+                c2 = emitir_factura_cuenta_por_cobrar(
+                    orden=ot2,
+                    nro_factura="FAC-B-0001-00319",
+                    fecha_emision=date.today() - timedelta(days=5),
+                    monto_facturado=ot2.monto_total,
+                )
+                registrar_movimiento_financiero(
+                    tipo=MovimientoFinanciero.TipoFlujo.INGRESO,
+                    categoria="Cobro Particular",
+                    concepto="Seña efectivo reparación Peugeot 208 (AD309TR)",
+                    monto=Decimal("300000.00"),
+                    medio_pago=MovimientoFinanciero.MedioPago.EFECTIVO,
+                    usuario=u_laura,
+                    fecha=date.today() - timedelta(days=4),
+                    cuenta=c2,
+                )
+
+            # 3) Egresos de compras de insumos y servicios operativos (HU-014 Criterio 2)
+            registrar_movimiento_financiero(
+                tipo=MovimientoFinanciero.TipoFlujo.EGRESO,
+                categoria="Compra Insumos",
+                concepto="Pago Remito REM-0008-00412 Pinturerías Córdoba (Barniz y Primer)",
+                monto=Decimal("245000.00"),
+                medio_pago=MovimientoFinanciero.MedioPago.TRANSFERENCIA,
+                usuario=u_laura,
+                fecha=date.today() - timedelta(days=6),
+            )
+            registrar_movimiento_financiero(
+                tipo=MovimientoFinanciero.TipoFlujo.EGRESO,
+                categoria="Gasto Operativo",
+                concepto="Factura EPEC Energía Trifásica Cabina de Pintura y Compresor",
+                monto=Decimal("185000.00"),
+                medio_pago=MovimientoFinanciero.MedioPago.TRANSFERENCIA,
+                usuario=u_laura,
+                fecha=date.today() - timedelta(days=2),
+            )
+
         self.stdout.write(
-            self.style.SUCCESS("Semilla de Sprints 1, 2, 3 y 4 aplicada exitosamente.")
+            self.style.SUCCESS(
+                "Semilla integral de Sprints 1, 2, 3, 4 y 5 aplicada exitosamente."
+            )
         )

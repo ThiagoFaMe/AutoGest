@@ -5,6 +5,8 @@ import MainLayout from "./layouts/MainLayout";
 import LoginPage from "./pages/auth/LoginPage";
 import BudgetsPage from "./pages/budgets/BudgetsPage";
 import ClientsPage from "./pages/clients/ClientsPage";
+import DashboardPage from "./pages/dashboard/DashboardPage";
+import FinancePage from "./pages/finance/FinancePage";
 import InsurersPage from "./pages/insurers/InsurersPage";
 import InventoryPage from "./pages/inventory/InventoryPage";
 import UsersPage from "./pages/users/UsersPage";
@@ -23,6 +25,14 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
+const HomeRedirect = () => {
+  const { user } = useAuth();
+  if (user?.rol === "administrador" || user?.rol === "administrativo") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <Navigate to="/ordenes" replace />;
+};
+
 export default function App() {
   return (
     <AuthProvider>
@@ -38,9 +48,25 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/ordenes" replace />} />
+            <Route index element={<HomeRedirect />} />
+            <Route
+              path="dashboard"
+              element={
+                <ProtectedRoute allowedRoles={["administrador", "administrativo"]}>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="ordenes" element={<WorkOrdersPage />} />
             <Route path="inventario" element={<InventoryPage />} />
+            <Route
+              path="finanzas"
+              element={
+                <ProtectedRoute allowedRoles={["administrador", "administrativo"]}>
+                  <FinancePage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="clientes" element={<ClientsPage />} />
             <Route path="vehiculos" element={<VehiclesPage />} />
             <Route

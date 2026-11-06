@@ -33,11 +33,26 @@ export default function MainLayout() {
           </div>
         </div>
 
-        <div className="px-2 mb-2 text-uppercase text-secondary small fw-semibold">
-          Sprint 3 y 4 • Taller y Pañol
-        </div>
-
         <nav className="nav flex-column gap-1 flex-grow-1">
+          {(user?.rol === "administrador" || user?.rol === "administrativo") && (
+            <>
+              <div className="px-2 mb-1 text-uppercase text-secondary small fw-semibold">
+                Sprint 5 • Dirección y Finanzas
+              </div>
+              <NavLink to="/dashboard" className="autogest-nav-link">
+                <i className="bi bi-speedometer2"></i>
+                <span>Dashboard KPIs (HU-014)</span>
+              </NavLink>
+              <NavLink to="/finanzas" className="autogest-nav-link">
+                <i className="bi bi-bank2"></i>
+                <span>Cuentas y Caja (HU-013..014)</span>
+              </NavLink>
+            </>
+          )}
+
+          <div className="px-2 mt-2 mb-1 text-uppercase text-secondary small fw-semibold">
+            Sprint 3 y 4 • Taller y Pañol
+          </div>
           <NavLink to="/ordenes" className="autogest-nav-link">
             <i className="bi bi-wrench-adjustable-circle-fill"></i>
             <span>Órdenes en Planta (HU-008..009)</span>

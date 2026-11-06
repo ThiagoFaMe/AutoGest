@@ -108,5 +108,30 @@ Este documento registra paso a paso todo lo construido en cada Sprint, vinculand
   2. **Descuento atómico y costo acumulado por vehículo:** Resta `stock_actual = stock_actual - cantidad`, guarda el `MovimientoStock` (`tipo_movimiento = "egreso_consumo"`) con el costo unitario vigente y recalcula el `costo_materiales_consumidos` de esa `OrdenDeTrabajo` (visible también dentro del modal de detalle de la orden en `WorkOrderDetailModal.jsx`).
   3. **Disparo inmediato de alerta de Stock Mínimo Alcanzado:** Si el remanente queda `<= stock_minimo`, devuelve `alerta_stock_minimo = True` y despliega un aviso preventivo inmediato en pantalla.
 
+---
+
+## Sprint 5: Cuentas por Cobrar, Flujo de Caja y Dashboard de KPIs (`HU-013` y `HU-014`)
+
+### `HU-013`: Seguimiento de cuentas por cobrar a aseguradoras, vencimientos y cálculo de mora
+- **Tabla en PostgreSQL:** `cuenta_por_cobrar` (Tabla 19) en `backend/apps/finance/models.py`.
+- **Reglas de negocio implementadas (`backend/apps/finance/services.py`):**
+  1. **Cálculo automático de vencimiento (`emitir_factura_cuenta_por_cobrar`):** Toma el parámetro `plazo_pago_dias` de la `CompaniaAseguradora` vinculada a la orden (30, 45 o 60 días) y calcula `fecha_vencimiento = fecha_emision + timedelta(days=plazo_pago_dias)`, iniciando con `saldo_pendiente = monto_facturado` y estado `"pendiente_en_plazo"`.
+  2. **Detección automática de mora y priorización de reclamos (`sincronizar_estados_mora_cuentas`):** En cada consulta, toda cuenta con `saldo_pendiente > 0` y `date.today() > fecha_vencimiento` pasa automáticamente a `"vencida_en_mora"`, calcula `dias_mora = (date.today() - fecha_vencimiento).days` y se ordena al tope del panel de reclamos (`CuentaPorCobrarViewSet`).
+  3. **Conciliación de cobros parciales y totales:** Al imputar un cobro, recalcula `saldo_pendiente = monto_facturado - monto_cobrado`, asignando `"pago_parcial"` si resta saldo o `"cancelada"` cuando llega a `$0.00` (sincronizando también el `saldo_pendiente` de la `OrdenDeTrabajo`).
+
+### `HU-014`: Registro de movimientos financieros, conciliación de cobros y Dashboard de KPIs
+- **Tabla en PostgreSQL:** `movimiento_financiero` (Tabla 20) en `backend/apps/finance/models.py`.
+- **Reglas de negocio implementadas (`registrar_movimiento_financiero` y `calcular_kpis_dashboard` en `backend/apps/finance/services.py`):**
+  1. **Control de ingresos y bloqueo de sobrecobro:** Valida que ningún ingreso supere el `saldo_pendiente` de la factura u orden y registra el medio de pago (`efectivo`, `transferencia` o `e-cheq`).
+  2. **Registro de egresos y Flujo de Caja Neto:** Registra compras de insumos/repuestos y gastos operativos, calculando en tiempo real `flujo_caja_neto = ingresos_totales - egresos_totales`.
+  3. **Dashboard Principal de 6 KPIs en tiempo real (`DashboardPage.jsx` - Prototipo 1):**
+     - **(a)** Vehículos activos en taller y gráfico de barras de distribución por las 8 fases secuenciales.
+     - **(b)** Tiempo promedio del ciclo de reparación (días) y tiempo promedio por fase (horas).
+     - **(c)** Tasa de conversión de presupuestos (`Aprobados / Emitidos × 100`).
+     - **(d)** Flujo de caja neto (Ingresos cobrados vs. Egresos).
+     - **(e)** Deuda pendiente de aseguradoras discriminando cartera en plazo y cartera vencida en mora.
+     - **(f)** Cantidad de insumos en alerta de stock mínimo.
+
+
 
 

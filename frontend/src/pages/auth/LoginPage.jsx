@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/ordenes");
+      navigate("/");
     } catch (err) {
       const detail =
         err.response?.data?.detail ||
