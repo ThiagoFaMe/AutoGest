@@ -6,6 +6,7 @@ import LoginPage from "./pages/auth/LoginPage";
 import BudgetsPage from "./pages/budgets/BudgetsPage";
 import ClientsPage from "./pages/clients/ClientsPage";
 import InsurersPage from "./pages/insurers/InsurersPage";
+import InventoryPage from "./pages/inventory/InventoryPage";
 import UsersPage from "./pages/users/UsersPage";
 import VehiclesPage from "./pages/vehicles/VehiclesPage";
 import PublicTrackingPage from "./pages/workorders/PublicTrackingPage";
@@ -39,6 +40,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="/ordenes" replace />} />
             <Route path="ordenes" element={<WorkOrdersPage />} />
+            <Route path="inventario" element={<InventoryPage />} />
             <Route path="clientes" element={<ClientsPage />} />
             <Route path="vehiculos" element={<VehiclesPage />} />
             <Route

@@ -334,6 +334,7 @@ class Command(BaseCommand):
 
         # Segunda Orden de Trabajo con alerta de demora activa para demostrar HU-009 Criterio 2
         v_208 = Vehiculo.objects.filter(patente="AD309TR").first()
+        ot2 = OrdenDeTrabajo.objects.filter(vehiculo__patente="AD309TR").first()
         if v_208 and OrdenDeTrabajo.objects.count() < 2:
             p4 = Presupuesto.objects.create(
                 tipo=Presupuesto.Tipo.PARTICULAR,
@@ -380,4 +381,112 @@ class Command(BaseCommand):
                 ot2.estado_actual = f5.nombre_fase
                 ot2.save(update_fields=["estado_actual"])
 
-        self.stdout.write(self.style.SUCCESS("Semilla de Sprints 1, 2 y 3 aplicada exitosamente."))
+        # Semilla de Inventario de Pañol y Consumos por OT para Sprint 4 (HU-010, HU-011 y HU-012)
+        from apps.inventory.models import InsumoRepuesto, MovimientoStock
+        from apps.inventory.services import registrar_consumo_ot, registrar_ingreso_stock
+
+        insumos_demo = [
+            {
+                "codigo": "INS-001",
+                "nombre": "Barniz Poliuretánico Alto Sólido 2K Glasurit",
+                "categoria": InsumoRepuesto.Categoria.PINTURA,
+                "unidad_medida": InsumoRepuesto.UnidadMedida.LITROS,
+                "stock_actual": Decimal("6.00"),
+                "stock_minimo": Decimal("4.00"),
+                "costo_unitario": Decimal("38500.00"),
+            },
+            {
+                "codigo": "INS-002",
+                "nombre": "Primer Aparejo Poliuretánico Gris 2K",
+                "categoria": InsumoRepuesto.Categoria.PREPARACION,
+                "unidad_medida": InsumoRepuesto.UnidadMedida.LITROS,
+                "stock_actual": Decimal("2.00"),
+                "stock_minimo": Decimal("3.00"),
+                "costo_unitario": Decimal("24000.00"),
+            },
+            {
+                "codigo": "INS-003",
+                "nombre": "Masilla Poliéster Ultraliviana Roberlo",
+                "categoria": InsumoRepuesto.Categoria.PREPARACION,
+                "unidad_medida": InsumoRepuesto.UnidadMedida.KILOGRAMOS,
+                "stock_actual": Decimal("1.50"),
+                "stock_minimo": Decimal("2.00"),
+                "costo_unitario": Decimal("16800.00"),
+            },
+            {
+                "codigo": "INS-004",
+                "nombre": "Discos Abrasivos Lija Seco P320 (Caja x 50u)",
+                "categoria": InsumoRepuesto.Categoria.ABRASIVOS,
+                "unidad_medida": InsumoRepuesto.UnidadMedida.UNIDADES,
+                "stock_actual": Decimal("45.00"),
+                "stock_minimo": Decimal("15.00"),
+                "costo_unitario": Decimal("950.00"),
+            },
+            {
+                "codigo": "INS-005",
+                "nombre": "Base Bicapa Colorimétrica Gris Indium (LR7H)",
+                "categoria": InsumoRepuesto.Categoria.PINTURA,
+                "unidad_medida": InsumoRepuesto.UnidadMedida.LITROS,
+                "stock_actual": Decimal("3.50"),
+                "stock_minimo": Decimal("1.50"),
+                "costo_unitario": Decimal("46000.00"),
+            },
+            {
+                "codigo": "REP-101",
+                "nombre": "Paragolpes Delantero VW Amarok V6 Original",
+                "categoria": InsumoRepuesto.Categoria.AUTOPARTES,
+                "unidad_medida": InsumoRepuesto.UnidadMedida.UNIDADES,
+                "stock_actual": Decimal("1.00"),
+                "stock_minimo": Decimal("0.00"),
+                "costo_unitario": Decimal("420000.00"),
+            },
+        ]
+
+        for ins_data in insumos_demo:
+            InsumoRepuesto.objects.get_or_create(
+                codigo=ins_data["codigo"],
+                defaults=ins_data,
+            )
+
+        if MovimientoStock.objects.count() == 0 and ot1 and u_laura and u_martin:
+            barniz = InsumoRepuesto.objects.filter(codigo="INS-001").first()
+            primer = InsumoRepuesto.objects.filter(codigo="INS-002").first()
+            masilla = InsumoRepuesto.objects.filter(codigo="INS-003").first()
+            lijas = InsumoRepuesto.objects.filter(codigo="INS-004").first()
+
+            if barniz:
+                registrar_ingreso_stock(
+                    insumo=barniz,
+                    cantidad=Decimal("4.00"),
+                    costo_unitario=Decimal("38500.00"),
+                    remito_comprobante="REM-0008-00412 Pinturerías Córdoba",
+                    usuario=u_laura,
+                )
+            if masilla:
+                registrar_consumo_ot(
+                    insumo=masilla,
+                    orden=ot1,
+                    cantidad=Decimal("0.50"),
+                    usuario=u_martin,
+                    observacion_comprobante="Masillado puerta y guardabarros derecho",
+                )
+            if lijas:
+                registrar_consumo_ot(
+                    insumo=lijas,
+                    orden=ot1,
+                    cantidad=Decimal("8.00"),
+                    usuario=u_martin,
+                    observacion_comprobante="Lijado de preparación de superficie",
+                )
+            if primer and ot2:
+                registrar_consumo_ot(
+                    insumo=primer,
+                    orden=ot2,
+                    cantidad=Decimal("0.50"),
+                    usuario=u_martin,
+                    observacion_comprobante="Imprimación portón trasero Peugeot 208",
+                )
+
+        self.stdout.write(
+            self.style.SUCCESS("Semilla de Sprints 1, 2, 3 y 4 aplicada exitosamente.")
+        )

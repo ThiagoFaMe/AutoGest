@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { getInsumos, getMovimientosStock } from "../../api/inventoryApi";
 import {
   completarFaseReparacion,
+  getOrdenTrabajoById,
   iniciarFaseReparacion,
   registrarEntregaVehiculo,
 } from "../../api/workordersApi";
 import { useAuth } from "../../context/AuthContext";
+import StockConsumptionModal from "../inventory/StockConsumptionModal";
 
 const formatDateTime = (isoString) => {
   if (!isoString) return "—";
@@ -30,6 +33,27 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
   const [observacion, setObservacion] = useState("");
   const [loadingFaseId, setLoadingFaseId] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [consumosOT, setConsumosOT] = useState([]);
+  const [insumosCatalogo, setInsumosCatalogo] = useState([]);
+  const [showConsumeModal, setShowConsumeModal] = useState(false);
+
+  const loadConsumosOT = async () => {
+    if (!orden?.id_orden) return;
+    try {
+      const [movData, insData] = await Promise.all([
+        getMovimientosStock({ id_orden: orden.id_orden }),
+        getInsumos(),
+      ]);
+      setConsumosOT(Array.isArray(movData) ? movData : movData.results || []);
+      setInsumosCatalogo(Array.isArray(insData) ? insData : insData.results || []);
+    } catch (err) {
+      console.error("Error cargando consumos de la OT:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadConsumosOT();
+  }, [orden?.id_orden]);
 
   if (!orden) return null;
 
@@ -495,6 +519,98 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                 );
               })}
             </div>
+
+            {/* Sección Inferior: Insumos y Repuestos Consumidos en esta OT (HU-009 y HU-012) */}
+            <div className="mt-4 pt-3 border-top">
+              <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
+                <div>
+                  <h6 className="fw-bold text-uppercase text-secondary small mb-0">
+                    <i className="bi bi-boxes me-1"></i>
+                    Insumos y Repuestos Imputados a esta Orden (HU-012)
+                  </h6>
+                  {orden.costo_materiales_consumidos !== null &&
+                    orden.costo_materiales_consumidos !== undefined && (
+                      <small className="text-muted">
+                        Costo acumulado de materiales en esta unidad:{" "}
+                        <strong className="text-dark">
+                          ${" "}
+                          {Number(
+                            orden.costo_materiales_consumidos
+                          ).toLocaleString("es-AR", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </strong>
+                      </small>
+                    )}
+                </div>
+
+                {!orden.fecha_entrega_real && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-primary fw-semibold"
+                    onClick={() => setShowConsumeModal(true)}
+                  >
+                    <i className="bi bi-plus-circle me-1"></i>
+                    Imputar Material del Pañol a esta OT
+                  </button>
+                )}
+              </div>
+
+              {consumosOT.length === 0 ? (
+                <div className="card border-0 shadow-sm">
+                  <div className="card-body py-3 text-center text-muted small">
+                    Aún no se registraron consumos de insumos o repuestos para esta orden.
+                  </div>
+                </div>
+              ) : (
+                <div className="card border-0 shadow-sm">
+                  <div className="table-responsive">
+                    <table className="table table-sm align-middle mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Fecha / Hora</th>
+                          <th>Código e Insumo</th>
+                          <th className="text-end">Cantidad</th>
+                          <th>Tarea / Observación</th>
+                          <th>Responsable</th>
+                          {canRegisterDelivery && (
+                            <th className="text-end">Subtotal Costo</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consumosOT.map((c) => (
+                          <tr key={c.id_mov_stock}>
+                            <td className="small text-muted">
+                              {formatDateTime(c.fecha_hora)}
+                            </td>
+                            <td>
+                              <strong>{c.insumo_codigo}</strong> — {c.insumo_nombre}
+                            </td>
+                            <td className="text-end fw-bold text-danger">
+                              -{c.cantidad} {c.insumo_unidad}
+                            </td>
+                            <td className="small text-muted">
+                              {c.remito_comprobante}
+                            </td>
+                            <td className="small">{c.usuario_nombre}</td>
+                            {canRegisterDelivery && (
+                              <td className="text-end fw-semibold">
+                                ${" "}
+                                {Number(c.subtotal_valorizado).toLocaleString(
+                                  "es-AR",
+                                  { minimumFractionDigits: 2 }
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="modal-footer bg-white">
@@ -508,6 +624,26 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
           </div>
         </div>
       </div>
+
+      {showConsumeModal && (
+        <StockConsumptionModal
+          insumos={insumosCatalogo}
+          preselectedOrden={orden}
+          onClose={() => setShowConsumeModal(false)}
+          onSuccess={async (resp) => {
+            setShowConsumeModal(false);
+            setFeedback({
+              type: resp.alerta_stock_minimo ? "warning" : "success",
+              text: resp.detail,
+            });
+            await loadConsumosOT();
+            if (onUpdated) {
+              const refreshed = await getOrdenTrabajoById(orden.id_orden);
+              onUpdated(refreshed);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

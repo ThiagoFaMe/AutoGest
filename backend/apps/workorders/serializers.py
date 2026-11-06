@@ -90,6 +90,8 @@ class OrdenDeTrabajoSerializer(serializers.ModelSerializer):
     fases_completadas = serializers.SerializerMethodField(read_only=True)
     total_fases = serializers.SerializerMethodField(read_only=True)
     progreso_porcentaje = serializers.SerializerMethodField(read_only=True)
+    costo_materiales_consumidos = serializers.SerializerMethodField(read_only=True)
+    cantidad_consumos_registrados = serializers.SerializerMethodField(read_only=True)
 
     fases = FaseReparacionSerializer(many=True, read_only=True)
 
@@ -131,6 +133,8 @@ class OrdenDeTrabajoSerializer(serializers.ModelSerializer):
             "fases_completadas",
             "total_fases",
             "progreso_porcentaje",
+            "costo_materiales_consumidos",
+            "cantidad_consumos_registrados",
             "fases",
         ]
 
@@ -184,6 +188,14 @@ class OrdenDeTrabajoSerializer(serializers.ModelSerializer):
         )
         return int(round(((2 + completadas_taller) / 10.0) * 100))
 
+    def get_costo_materiales_consumidos(self, obj):
+        from apps.inventory.services import calcular_costo_materiales_orden
+
+        return str(calcular_costo_materiales_orden(obj))
+
+    def get_cantidad_consumos_registrados(self, obj):
+        return obj.consumos_stock.count()
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get("request")
@@ -192,6 +204,7 @@ class OrdenDeTrabajoSerializer(serializers.ModelSerializer):
             if getattr(request.user, "rol", None) == Usuario.Rol.OPERARIO:
                 data["monto_total"] = None
                 data["saldo_pendiente"] = None
+                data["costo_materiales_consumidos"] = None
         return data
 
 

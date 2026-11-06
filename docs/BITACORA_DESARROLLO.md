@@ -85,4 +85,28 @@ Este documento registra paso a paso todo lo construido en cada Sprint, vinculand
   2. **Detección automática de retraso:** Si la orden sigue abierta (`fecha_entrega_real is None`) y `date.today() > fecha_estimada_entrega`, calcula `en_retraso = True` y `dias_retraso`, resaltando la tarjeta en rojo en el tablero de planta.
   3. **Seguridad RBAC (Tabla 21):** Cuando consulta un usuario con rol `operario`, el serializador enmascara `monto_total` y `saldo_pendiente` (`None`). Además, expone el portal público `/seguimiento` (`GET /api/workorders/seguimiento/<codigo>/`) para consulta externa por código (`OT-2026-001`) o patente sin exponer datos sensibles.
 
+---
+
+## Sprint 4: Inventario de Pañol y Consumo por Orden de Trabajo (`HU-010` a `HU-012`)
+
+### `HU-010`: Gestión del catálogo de insumos, repuestos y configuración de stock mínimo
+- **Tabla en PostgreSQL:** `insumo_repuesto` (Tabla 17) en `backend/apps/inventory/models.py`.
+- **Reglas de negocio implementadas:**
+  1. **Unicidad de código interno (`codigo`):** Normaliza en mayúsculas (`INS-001`, `REP-101`) y valida unicidad estricta en `InsumoRepuestoSerializer`.
+  2. **Umbral de reposición (`stock_minimo >= 0`) y alerta automática:** La propiedad `en_alerta_stock` (`stock_actual <= stock_minimo`) etiqueta automáticamente el ítem con `"Bajo Stock / Reposición Crítica"` y lo resalta en rojo en la interfaz (`InventoryPage.jsx` - Prototipo 4).
+
+### `HU-011`: Registro de ingresos de stock por compras y remitos de proveedores
+- **Tabla en PostgreSQL:** `movimiento_stock` (Tabla 18, `tipo_movimiento = "ingreso"`).
+- **Reglas de negocio implementadas (`registrar_ingreso_stock` en `backend/apps/inventory/services.py`):**
+  1. **Actualización atómica con bloqueo de fila (`select_for_update`):** Verifica `cantidad > 0` y `remito_comprobante` obligatorio, asienta el movimiento con el usuario responsable, suma `stock_actual = stock_actual + cantidad` y actualiza `costo_unitario`.
+  2. **Desactivación automática de alerta:** Si el insumo se encontraba en alerta (`stock_actual <= stock_minimo`) y tras el ingreso supera el umbral, el sistema desactiva automáticamente la alerta de reposición e informa el cambio.
+  3. **Seguridad RBAC:** Solo los perfiles `administrador` y `administrativo` pueden registrar ingresos por compra (`IsAdministrativoOrAdmin`).
+
+### `HU-012`: Registro de consumo de insumos por Orden de Trabajo y alertas de reposición
+- **Reglas de negocio implementadas (`registrar_consumo_ot` y `calcular_costo_materiales_orden` en `backend/apps/inventory/services.py`):**
+  1. **Vínculo obligatorio a OT activa y bloqueo de stock negativo:** Si no se selecciona una `OrdenDeTrabajo` activa o si `cantidad > stock_actual`, el backend rechaza la transacción (`HTTP 400 Bad Request`) informando el stock disponible exacto.
+  2. **Descuento atómico y costo acumulado por vehículo:** Resta `stock_actual = stock_actual - cantidad`, guarda el `MovimientoStock` (`tipo_movimiento = "egreso_consumo"`) con el costo unitario vigente y recalcula el `costo_materiales_consumidos` de esa `OrdenDeTrabajo` (visible también dentro del modal de detalle de la orden en `WorkOrderDetailModal.jsx`).
+  3. **Disparo inmediato de alerta de Stock Mínimo Alcanzado:** Si el remanente queda `<= stock_minimo`, devuelve `alerta_stock_minimo = True` y despliega un aviso preventivo inmediato en pantalla.
+
+
 
