@@ -553,6 +553,44 @@ class Command(BaseCommand):
                 fecha=date.today() - timedelta(days=2),
             )
 
+        # Semilla de Turnos del Calendario de Ingresos al Taller
+        from apps.workorders.models import TurnoTaller
+
+        if TurnoTaller.objects.count() == 0:
+            v_corolla = Vehiculo.objects.filter(patente="AE719MP").first()
+            v_focus = Vehiculo.objects.filter(patente="NQP842").first()
+            fed_pat = CompaniaAseguradora.objects.filter(cuit="30-50003196-0").first()
+
+            TurnoTaller.objects.create(
+                fecha_turno=date.today() + timedelta(days=1),
+                hora_turno="09:00",
+                tipo_turno=TurnoTaller.TipoTurno.INGRESO_REPARACION,
+                estado=TurnoTaller.EstadoTurno.PROGRAMADO,
+                vehiculo=v_corolla,
+                compania=fed_pat,
+                motivo_observaciones="Ingreso a planta para cambio de paragolpes trasero y reparación de baúl (Federación Patronal).",
+            )
+            TurnoTaller.objects.create(
+                fecha_turno=date.today() + timedelta(days=2),
+                hora_turno="10:30",
+                tipo_turno=TurnoTaller.TipoTurno.INGRESO_REPARACION,
+                estado=TurnoTaller.EstadoTurno.PROGRAMADO,
+                vehiculo=v_focus,
+                motivo_observaciones="Ingreso particular Focus III (pintar puerta delantera izquierda y lateral derecho).",
+            )
+            TurnoTaller.objects.create(
+                fecha_turno=date.today() + timedelta(days=4),
+                hora_turno="15:00",
+                tipo_turno=TurnoTaller.TipoTurno.PERITAJE_SEGURO,
+                estado=TurnoTaller.EstadoTurno.PROGRAMADO,
+                cliente_nombre_libre="Gómez, Hernán",
+                telefono_contacto="351-6891234",
+                patente_referencia="AG120KL",
+                vehiculo_referencia="Chevrolet Cruze LTZ Blanco",
+                compania=fed_pat,
+                motivo_observaciones="Visita del perito Téc. Gustavo Almirón para inspección de choque frontal.",
+            )
+
         self.stdout.write(
             self.style.SUCCESS(
                 "Semilla integral de Sprints 1, 2, 3, 4 y 5 aplicada exitosamente."

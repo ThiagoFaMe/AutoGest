@@ -9,13 +9,17 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.users.permissions import IsAdministrativoOrAdmin
-from .models import OrdenDeTrabajo
+from apps.users.permissions import (
+    IsAdminOrAdministrativoWriteOperarioRead,
+    IsAdministrativoOrAdmin,
+)
+from .models import OrdenDeTrabajo, TurnoTaller
 from .serializers import (
     ConsultaPublicaOrdenSerializer,
     FaseAccionInputSerializer,
     OrdenDeTrabajoSerializer,
     RegistrarEntregaInputSerializer,
+    TurnoTallerSerializer,
 )
 from .services import (
     completar_fase_reparacion,
@@ -191,3 +195,35 @@ class ConsultaPublicaSeguimientoAPIView(APIView):
             ConsultaPublicaOrdenSerializer(orden).data,
             status=status.HTTP_200_OK,
         )
+
+
+class TurnoTallerViewSet(viewsets.ModelViewSet):
+    """
+    Gestión de la Agenda y Calendario de Turnos de Ingreso de Vehículos al Taller.
+    - Administrador y Administrativo: Pueden agendar, reprogramar, marcar ingreso o cancelar.
+    - Operario: Puede consultar el calendario para saber qué autos ingresan en la semana.
+    """
+
+    queryset = (
+        TurnoTaller.objects.select_related(
+            "vehiculo__cliente", "compania", "orden"
+        )
+        .all()
+        .order_by("fecha_turno", "hora_turno", "id_turno")
+    )
+    serializer_class = TurnoTallerSerializer
+    permission_classes = [IsAdminOrAdministrativoWriteOperarioRead]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        mes = self.request.query_params.get("mes")
+        anio = self.request.query_params.get("anio")
+        estado = (self.request.query_params.get("estado") or "").strip()
+
+        if anio:
+            qs = qs.filter(fecha_turno__year=int(anio))
+        if mes:
+            qs = qs.filter(fecha_turno__month=int(mes))
+        if estado:
+            qs = qs.filter(estado=estado)
+        return qs

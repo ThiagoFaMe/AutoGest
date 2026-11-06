@@ -154,3 +154,92 @@ class FaseReparacion(models.Model):
 
     def __str__(self):
         return f"{self.orden.codigo_seguimiento} | Fase {self.numero_secuencia}: {self.nombre_fase} ({self.estado})"
+
+
+class TurnoTaller(models.Model):
+    """
+    Entidad TurnoTaller para el Calendario Operativo de Ingresos y Peritajes de Taller Sergio:
+    Permite agendar cuándo ingresará un vehículo a planta (por presupuesto aprobado,
+    inspección de perito o cotización presencial) con opción de asociar un vehículo
+    ya registrado o anotar rápidamente los datos del cliente/auto por teléfono.
+    """
+
+    class TipoTurno(models.TextChoices):
+        INGRESO_REPARACION = "ingreso_reparacion", "Ingreso de Vehículo a Reparación"
+        PERITAJE_SEGURO = "peritaje_seguro", "Inspección / Peritaje de Aseguradora"
+        COTIZACION = "cotizacion", "Turno para Presupuesto / Cotización"
+        ENTREGA_UNIDAD = "entrega_unidad", "Entrega Programada de Unidad"
+
+    class EstadoTurno(models.TextChoices):
+        PROGRAMADO = "programado", "Programado"
+        INGRESADO = "ingresado", "Vehículo Recibido en Taller"
+        REPROGRAMADO = "reprogramado", "Reprogramado"
+        CANCELADO = "cancelado", "Cancelado"
+
+    id_turno = models.AutoField(primary_key=True, db_column="id_turno")
+    fecha_turno = models.DateField(db_column="fecha_turno")
+    hora_turno = models.TimeField(default="08:30", db_column="hora_turno")
+    tipo_turno = models.CharField(
+        max_length=25,
+        choices=TipoTurno.choices,
+        default=TipoTurno.INGRESO_REPARACION,
+        db_column="tipo_turno",
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoTurno.choices,
+        default=EstadoTurno.PROGRAMADO,
+        db_column="estado",
+    )
+
+    vehiculo = models.ForeignKey(
+        Vehiculo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="turnos_programados",
+        db_column="id_vehiculo",
+    )
+    compania = models.ForeignKey(
+        CompaniaAseguradora,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="turnos_programados",
+        db_column="id_compania",
+    )
+    orden = models.ForeignKey(
+        OrdenDeTrabajo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="turnos_asociados",
+        db_column="id_orden",
+    )
+
+    # Campos de anotación rápida (por si el vehículo aún no fue dado de alta en el padrón)
+    cliente_nombre_libre = models.CharField(
+        max_length=100, blank=True, default="", db_column="cliente_nombre_libre"
+    )
+    telefono_contacto = models.CharField(
+        max_length=40, blank=True, default="", db_column="telefono_contacto"
+    )
+    patente_referencia = models.CharField(
+        max_length=15, blank=True, default="", db_column="patente_referencia"
+    )
+    vehiculo_referencia = models.CharField(
+        max_length=100, blank=True, default="", db_column="vehiculo_referencia"
+    )
+    motivo_observaciones = models.CharField(
+        max_length=400, blank=True, default="", db_column="motivo_observaciones"
+    )
+
+    class Meta:
+        db_table = "turno_taller"
+        verbose_name = "Turno de Taller"
+        verbose_name_plural = "Turnos de Taller"
+        ordering = ["fecha_turno", "hora_turno", "id_turno"]
+
+    def __str__(self):
+        pat = self.vehiculo.patente if self.vehiculo else self.patente_referencia
+        return f"{self.fecha_turno} {self.hora_turno} - {pat} ({self.tipo_turno})"

@@ -39,3 +39,24 @@ export const consultarSeguimientoPublico = async (codigo) => {
   );
   return data;
 };
+
+export const getTurnosTaller = async (params = {}) => {
+  const { data } = await axiosClient.get("/workorders/turnos/", { params });
+  return data;
+};
+
+export const createTurnoTaller = async (payload) => {
+  const { data } = await axiosClient.post("/workorders/turnos/", payload);
+  return data;
+};
+
+export const updateTurnoTaller = async (id, payload) => {
+  const { data } = await axiosClient.patch(`/workorders/turnos/${id}/`, payload);
+  return data;
+};
+
+export const deleteTurnoTaller = async (id) => {
+  const { data } = await axiosClient.delete(`/workorders/turnos/${id}/`);
+  return data;
+};
+

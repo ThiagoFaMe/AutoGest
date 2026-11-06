@@ -36,74 +36,62 @@ export default function MainLayout() {
         <nav className="nav flex-column gap-1 flex-grow-1">
           {(user?.rol === "administrador" || user?.rol === "administrativo") && (
             <>
-              <div className="px-2 mb-1 text-uppercase text-secondary small fw-semibold">
-                Sprint 5 • Dirección y Finanzas
-              </div>
               <NavLink to="/dashboard" className="autogest-nav-link">
                 <i className="bi bi-speedometer2"></i>
-                <span>Dashboard KPIs (HU-014)</span>
+                <span>Dashboard</span>
               </NavLink>
-              <NavLink to="/finanzas" className="autogest-nav-link">
-                <i className="bi bi-bank2"></i>
-                <span>Cuentas y Caja (HU-013..014)</span>
+
+              <NavLink to="/presupuestos" className="autogest-nav-link">
+                <i className="bi bi-file-earmark-text-fill"></i>
+                <span>Presupuestos</span>
               </NavLink>
             </>
           )}
 
-          <div className="px-2 mt-2 mb-1 text-uppercase text-secondary small fw-semibold">
-            Sprint 3 y 4 • Taller y Pañol
-          </div>
           <NavLink to="/ordenes" className="autogest-nav-link">
             <i className="bi bi-wrench-adjustable-circle-fill"></i>
-            <span>Órdenes en Planta (HU-008..009)</span>
+            <span>Órdenes en planta</span>
           </NavLink>
 
-          <NavLink to="/inventario" className="autogest-nav-link">
-            <i className="bi bi-boxes"></i>
-            <span>Inventario y Pañol (HU-010..012)</span>
+          <NavLink to="/turnos" className="autogest-nav-link">
+            <i className="bi bi-calendar-week-fill"></i>
+            <span>Turnos y Calendario</span>
           </NavLink>
-
-          <div className="px-2 mt-3 mb-1 text-uppercase text-secondary small fw-semibold">
-            Sprint 1 • Padrones y Acceso
-          </div>
 
           <NavLink to="/clientes" className="autogest-nav-link">
             <i className="bi bi-people-fill"></i>
-            <span>Clientes (HU-002)</span>
+            <span>Clientes</span>
           </NavLink>
 
           <NavLink to="/vehiculos" className="autogest-nav-link">
             <i className="bi bi-truck-front-fill"></i>
-            <span>Vehículos (HU-003)</span>
+            <span>Vehículos</span>
           </NavLink>
 
           {(user?.rol === "administrador" || user?.rol === "administrativo") && (
-            <>
-              <NavLink to="/aseguradoras" className="autogest-nav-link">
-                <i className="bi bi-shield-check"></i>
-                <span>Aseguradoras (HU-004)</span>
-              </NavLink>
+            <NavLink to="/aseguradoras" className="autogest-nav-link">
+              <i className="bi bi-shield-check"></i>
+              <span>Aseguradoras</span>
+            </NavLink>
+          )}
 
-              <div className="px-2 mt-3 mb-1 text-uppercase text-secondary small fw-semibold">
-                Sprint 2 • Cotización y OT
-              </div>
-              <NavLink to="/presupuestos" className="autogest-nav-link">
-                <i className="bi bi-file-earmark-text-fill"></i>
-                <span>Presupuestos (HU-005..007)</span>
-              </NavLink>
-            </>
+          <NavLink to="/inventario" className="autogest-nav-link">
+            <i className="bi bi-boxes"></i>
+            <span>Inventario</span>
+          </NavLink>
+
+          {(user?.rol === "administrador" || user?.rol === "administrativo") && (
+            <NavLink to="/finanzas" className="autogest-nav-link">
+              <i className="bi bi-bank2"></i>
+              <span>Cuentas y Caja</span>
+            </NavLink>
           )}
 
           {user?.rol === "administrador" && (
-            <>
-              <div className="px-2 mt-3 mb-1 text-uppercase text-secondary small fw-semibold">
-                Seguridad RBAC
-              </div>
-              <NavLink to="/usuarios" className="autogest-nav-link">
-                <i className="bi bi-person-lock"></i>
-                <span>Usuarios y Roles (HU-001)</span>
-              </NavLink>
-            </>
+            <NavLink to="/usuarios" className="autogest-nav-link mt-2 border-top border-secondary border-opacity-25 pt-2">
+              <i className="bi bi-person-lock"></i>
+              <span>Usuarios y Roles</span>
+            </NavLink>
           )}
         </nav>
 

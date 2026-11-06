@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import MainLayout from "./layouts/MainLayout";
 import LoginPage from "./pages/auth/LoginPage";
+import AppointmentsPage from "./pages/appointments/AppointmentsPage";
 import BudgetsPage from "./pages/budgets/BudgetsPage";
 import ClientsPage from "./pages/clients/ClientsPage";
 import DashboardPage from "./pages/dashboard/DashboardPage";
@@ -58,6 +59,7 @@ export default function App() {
               }
             />
             <Route path="ordenes" element={<WorkOrdersPage />} />
+            <Route path="turnos" element={<AppointmentsPage />} />
             <Route path="inventario" element={<InventoryPage />} />
             <Route
               path="finanzas"

@@ -8,7 +8,7 @@ Incluye:
 from rest_framework import serializers
 
 from apps.users.models import Usuario
-from .models import FaseReparacion, OrdenDeTrabajo
+from .models import FaseReparacion, OrdenDeTrabajo, TurnoTaller
 from .services import calculate_order_timing_metrics, calculate_phase_duration
 
 
@@ -274,3 +274,65 @@ class ConsultaPublicaOrdenSerializer(serializers.ModelSerializer):
             }
             for f in obj.fases.all().order_by("numero_secuencia")
         ]
+
+
+class TurnoTallerSerializer(serializers.ModelSerializer):
+    patente_display = serializers.SerializerMethodField(read_only=True)
+    vehiculo_display = serializers.SerializerMethodField(read_only=True)
+    cliente_display = serializers.SerializerMethodField(read_only=True)
+    telefono_display = serializers.SerializerMethodField(read_only=True)
+    compania_nombre = serializers.SerializerMethodField(read_only=True)
+    orden_codigo = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = TurnoTaller
+        fields = [
+            "id_turno",
+            "fecha_turno",
+            "hora_turno",
+            "tipo_turno",
+            "estado",
+            "vehiculo",
+            "compania",
+            "orden",
+            "cliente_nombre_libre",
+            "telefono_contacto",
+            "patente_referencia",
+            "vehiculo_referencia",
+            "motivo_observaciones",
+            "patente_display",
+            "vehiculo_display",
+            "cliente_display",
+            "telefono_display",
+            "compania_nombre",
+            "orden_codigo",
+        ]
+
+    def get_patente_display(self, obj):
+        if obj.vehiculo:
+            return obj.vehiculo.patente
+        return (obj.patente_referencia or "S/D").upper()
+
+    def get_vehiculo_display(self, obj):
+        if obj.vehiculo:
+            return f"{obj.vehiculo.marca} {obj.vehiculo.modelo} ({obj.vehiculo.color})"
+        return obj.vehiculo_referencia or "Vehículo a confirmar"
+
+    def get_cliente_display(self, obj):
+        if obj.vehiculo and obj.vehiculo.cliente:
+            c = obj.vehiculo.cliente
+            return f"{c.apellido}, {c.nombre}"
+        return obj.cliente_nombre_libre or "Cliente Particular"
+
+    def get_telefono_display(self, obj):
+        if obj.telefono_contacto:
+            return obj.telefono_contacto
+        if obj.vehiculo and obj.vehiculo.cliente:
+            return obj.vehiculo.cliente.telefono
+        return ""
+
+    def get_compania_nombre(self, obj):
+        return obj.compania.razon_social if obj.compania else None
+
+    def get_orden_codigo(self, obj):
+        return obj.orden.codigo_seguimiento if obj.orden else None
