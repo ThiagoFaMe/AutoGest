@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  eliminarMovimientoFinanciero,
   getCuentasPorCobrar,
   getMovimientosFinancieros,
 } from "../../api/financeApi";
@@ -32,9 +33,29 @@ export default function FinancePage() {
 
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [selectedCuentaCobro, setSelectedCuentaCobro] = useState(null);
+  const [editingMovement, setEditingMovement] = useState(null);
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [defaultMovementTipo, setDefaultMovementTipo] = useState("ingreso");
   const [feedback, setFeedback] = useState(null);
+
+  const handleDeleteMovement = async (mov) => {
+    if (
+      !window.confirm(
+        `¿Seguro que querés eliminar el ${mov.tipo} "${mov.concepto}" por ${formatCurrency(
+          mov.monto
+        )}?`
+      )
+    ) {
+      return;
+    }
+    try {
+      const resp = await eliminarMovimientoFinanciero(mov.id_movimiento);
+      setFeedback(resp.detail);
+      loadData();
+    } catch {
+      alert("No se pudo eliminar el movimiento financiero.");
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -116,7 +137,7 @@ export default function FinancePage() {
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-bank2 text-primary me-2"></i>
-            Cuentas por Cobrar, Vencimientos y Flujo de Caja (HU-013 y HU-014)
+            Cuentas por Cobrar, Vencimientos y Flujo de Caja
           </h4>
           <p className="text-muted small mb-0">
             Seguimiento de facturas a aseguradoras, alerta automática de mora y conciliación de ingresos/egresos.
@@ -130,7 +151,7 @@ export default function FinancePage() {
             onClick={() => setShowInvoiceModal(true)}
           >
             <i className="bi bi-receipt-cutoff me-1"></i>
-            Emitir Factura OT (HU-013)
+            Emitir Factura OT
           </button>
 
           <button
@@ -138,6 +159,7 @@ export default function FinancePage() {
             className="btn btn-success fw-semibold"
             onClick={() => {
               setSelectedCuentaCobro(null);
+              setEditingMovement(null);
               setDefaultMovementTipo("ingreso");
               setShowMovementModal(true);
             }}
@@ -151,12 +173,13 @@ export default function FinancePage() {
             className="btn btn-danger fw-semibold"
             onClick={() => {
               setSelectedCuentaCobro(null);
+              setEditingMovement(null);
               setDefaultMovementTipo("egreso");
               setShowMovementModal(true);
             }}
           >
             <i className="bi bi-dash-circle me-1"></i>
-            Registrar Egreso (HU-014)
+            Registrar Egreso
           </button>
         </div>
       </div>
@@ -416,12 +439,13 @@ export default function FinancePage() {
                   <th>Vínculo (OT / Factura)</th>
                   <th>Registrado por</th>
                   <th className="text-end">Monto ($)</th>
+                  <th className="text-end">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {movimientos.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-4 text-muted">
+                    <td colSpan="9" className="text-center py-4 text-muted">
                       No hay movimientos financieros registrados.
                     </td>
                   </tr>
@@ -467,6 +491,31 @@ export default function FinancePage() {
                         {m.tipo === "ingreso" ? "+" : "-"}
                         {formatCurrency(m.monto)}
                       </td>
+                      <td className="text-end">
+                        <div className="d-inline-flex gap-1 justify-content-end">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary"
+                            title="Editar importe, fecha, medio de pago o concepto"
+                            onClick={() => {
+                              setSelectedCuentaCobro(null);
+                              setEditingMovement(m);
+                              setShowMovementModal(true);
+                            }}
+                          >
+                            <i className="bi bi-pencil-square me-1"></i>
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            title="Eliminar movimiento"
+                            onClick={() => handleDeleteMovement(m)}
+                          >
+                            <i className="bi bi-trash"></i>
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -490,10 +539,15 @@ export default function FinancePage() {
       {showMovementModal && (
         <FinancialMovementModal
           preselectedCuenta={selectedCuentaCobro}
+          editingMovement={editingMovement}
           defaultTipo={defaultMovementTipo}
-          onClose={() => setShowMovementModal(false)}
+          onClose={() => {
+            setShowMovementModal(false);
+            setEditingMovement(null);
+          }}
           onSuccess={(resp) => {
             setShowMovementModal(false);
+            setEditingMovement(null);
             setFeedback(resp.detail);
             loadData();
           }}

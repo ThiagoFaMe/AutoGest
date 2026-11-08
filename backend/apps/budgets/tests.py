@@ -113,26 +113,42 @@ class Sprint2PresupuestosYOrdenTrabajoTests(TestCase):
             pres_data["fecha_vencimiento"], str(date.today() + timedelta(days=15))
         )
 
-    def test_hu006_presupuesto_aseguradora_exige_siniestro_perito_y_excluye_repuestos(self):
+    def test_hu006_presupuesto_aseguradora_exige_compania_siniestro_perito_opcionales_y_excluye_repuestos(self):
         """
-        HU-006 Criterios 1 y 2:
-        - Exige compañía, nro_siniestro y nombre_perito.
+        HU-006:
+        - Exige seleccionar la compañía aseguradora.
+        - Permite confeccionar y emitir el presupuesto aunque el cliente aún no tenga
+          número de siniestro ni perito liquidador asignado (campos opcionales).
         - Computa en monto_total solo mano de obra (monto_repuestos = 0 a cargo del seguro).
         """
-        # Sin siniestro ni perito -> falla validación (Criterio 1)
+        # Sin compañía aseguradora -> falla validación
         res_incompleto = self.client.post(
             "/api/budgets/presupuestos/",
             {
                 "tipo": "aseguradora",
                 "id_cliente": self.cliente.id_cliente,
                 "id_vehiculo": self.vehiculo.id_vehiculo,
-                "id_compania": self.aseguradora.id_compania,
+                "id_compania": None,
                 "nro_siniestro": "",
                 "nombre_perito": "",
             },
             format="json",
         )
         self.assertEqual(res_incompleto.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Con compañía aseguradora y SIN siniestro ni perito (caso habitual al pedir presupuesto) -> OK
+        res_sin_siniestro = self.client.post(
+            "/api/budgets/presupuestos/",
+            {
+                "tipo": "aseguradora",
+                "id_compania": self.aseguradora.id_compania,
+                "nro_siniestro": "",
+                "nombre_perito": "",
+                "rubros_importes": {"mano_obra": 450000},
+            },
+            format="json",
+        )
+        self.assertEqual(res_sin_siniestro.status_code, status.HTTP_201_CREATED)
 
         # Con siniestro y perito + repuestos listados como referencia técnica (Criterio 2)
         res_ok = self.client.post(
@@ -292,3 +308,73 @@ class Sprint2PresupuestosYOrdenTrabajoTests(TestCase):
         self.assertEqual(Decimal(res_aseg.data["monto_repuestos"]), Decimal("180000.00"))
         self.assertEqual(Decimal(res_aseg.data["monto_total"]), Decimal("3380000.00"))
         self.assertTrue(len(res_aseg.data["items"]) >= 4)
+
+    def test_emitir_sin_cliente_ni_vehiculo_y_registrar_al_aprobar_conservando_kpi(self):
+        """
+        Verifica el flujo solicitado por Taller Sergio:
+        1) Permite crear y emitir un presupuesto sin registrar aún al Cliente ni al Vehículo (prospecto).
+        2) El KPI del Dashboard contabiliza el presupuesto emitido.
+        3) Al aprobar el presupuesto (cuando el cliente lo acepta), se da de alta el Cliente y el Vehículo,
+           se crea la Orden de Trabajo con sus 8 fases y el KPI actualiza aprobados y tasa de conversión.
+        """
+        from apps.finance.services import calcular_kpis_dashboard
+
+        res_create = self.client.post(
+            "/api/budgets/presupuestos/",
+            {
+                "tipo": "particular",
+                "id_cliente": None,
+                "id_vehiculo": None,
+                "detalle_libre": "Honda CRV, patente: AC683VD\nParagolpes delantero, reparar y pintar\nGuardabarro delantero izq, reparar y pintar",
+                "rubros_importes": {
+                    "mano_obra": 850000,
+                    "repuestos": 150000,
+                    "total_final": 1000000,
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(res_create.status_code, status.HTTP_201_CREATED)
+        pres_id = res_create.data["id_presupuesto"]
+        self.assertIsNone(res_create.data["id_cliente"])
+        self.assertIsNone(res_create.data["id_vehiculo"])
+        self.assertEqual(res_create.data["vehiculo_patente"], "AC683VD")
+
+        res_emitir = self.client.post(f"/api/budgets/presupuestos/{pres_id}/emitir/")
+        self.assertEqual(res_emitir.status_code, status.HTTP_200_OK)
+
+        kpis_antes = calcular_kpis_dashboard()
+        self.assertEqual(kpis_antes["presupuestos_emitidos_totales"], 1)
+        self.assertEqual(kpis_antes["presupuestos_aprobados"], 0)
+        self.assertEqual(kpis_antes["presupuestos_pendientes"], 1)
+
+        # Ahora el cliente acepta el presupuesto -> lo aprobamos creando el cliente y el auto en el acto
+        res_aprobar = self.client.post(
+            f"/api/budgets/presupuestos/{pres_id}/aprobar/",
+            {
+                "fecha_estimada_entrega": str(date.today() + timedelta(days=5)),
+                "nuevo_cliente": {
+                    "dni": "29876543",
+                    "apellido": "Gómez",
+                    "nombre": "Federico",
+                    "telefono": "351-5551234",
+                    "direccion": "B° Gral. Paz",
+                },
+                "nuevo_vehiculo": {
+                    "patente": "AC683VD",
+                    "marca": "Honda",
+                    "modelo": "CRV",
+                    "anio": 2018,
+                    "color": "Gris Plata",
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(res_aprobar.status_code, status.HTTP_201_CREATED)
+
+        kpis_despues = calcular_kpis_dashboard()
+        self.assertEqual(kpis_despues["presupuestos_emitidos_totales"], 1)
+        self.assertEqual(kpis_despues["presupuestos_aprobados"], 1)
+        self.assertEqual(kpis_despues["tasa_conversion_presupuestos"], 100.0)
+        self.assertTrue(Vehiculo.objects.filter(patente="AC683VD").exists())
+        self.assertTrue(Cliente.objects.filter(dni="29876543").exists())

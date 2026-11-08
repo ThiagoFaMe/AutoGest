@@ -235,6 +235,179 @@ def registrar_movimiento_financiero(
     }
 
 
+def _recalcular_estado_cuenta(cuenta_locked: CuentaPorCobrar):
+    if cuenta_locked.saldo_pendiente <= Decimal("0.00"):
+        cuenta_locked.saldo_pendiente = Decimal("0.00")
+        cuenta_locked.estado_cobranza = CuentaPorCobrar.EstadoCobranza.CANCELADA
+    elif date.today() > cuenta_locked.fecha_vencimiento:
+        cuenta_locked.estado_cobranza = CuentaPorCobrar.EstadoCobranza.VENCIDA_EN_MORA
+    elif cuenta_locked.monto_cobrado > Decimal("0.00"):
+        cuenta_locked.estado_cobranza = CuentaPorCobrar.EstadoCobranza.PAGO_PARCIAL
+    else:
+        cuenta_locked.estado_cobranza = CuentaPorCobrar.EstadoCobranza.PENDIENTE_EN_PLAZO
+
+
+@transaction.atomic
+def actualizar_movimiento_financiero(
+    *,
+    movimiento: MovimientoFinanciero,
+    tipo: str | None = None,
+    categoria: str | None = None,
+    concepto: str | None = None,
+    monto: Decimal | None = None,
+    medio_pago: str | None = None,
+    fecha: date | None = None,
+) -> dict:
+    """
+    Actualiza un MovimientoFinanciero existente (ingreso o egreso).
+    Si el movimiento estaba vinculado a una CuentaPorCobrar u OrdenDeTrabajo,
+    revierte el importe anterior y aplica el nuevo importe recalculando saldos y estados.
+    """
+    mov = MovimientoFinanciero.objects.select_for_update().get(pk=movimiento.pk)
+    old_tipo = mov.tipo
+    old_monto = mov.monto
+
+    new_tipo = tipo if tipo is not None else mov.tipo
+    new_categoria = (categoria if categoria is not None else mov.categoria).strip()
+    new_concepto = (concepto if concepto is not None else mov.concepto).strip()
+    new_medio_pago = medio_pago if medio_pago is not None else mov.medio_pago
+    new_fecha = fecha if fecha is not None else mov.fecha
+    new_monto = (
+        Decimal(str(monto)).quantize(Decimal("0.01"))
+        if monto is not None
+        else mov.monto
+    )
+
+    if new_monto <= Decimal("0.00"):
+        raise ValidationError({"monto": "El importe del movimiento financiero debe ser mayor a cero."})
+    if not new_concepto:
+        raise ValidationError({"concepto": "El concepto o descripción del movimiento es obligatorio."})
+
+    cuenta_locked = None
+    orden_locked = None
+
+    if mov.cuenta_id:
+        cuenta_locked = CuentaPorCobrar.objects.select_for_update().get(pk=mov.cuenta_id)
+        orden_locked = OrdenDeTrabajo.objects.select_for_update().get(pk=cuenta_locked.orden_id)
+    elif mov.orden_id:
+        orden_locked = OrdenDeTrabajo.objects.select_for_update().get(pk=mov.orden_id)
+
+    # 1) Si antes era un INGRESO vinculado, revertimos su impacto previo antes de aplicar el nuevo
+    if old_tipo == MovimientoFinanciero.TipoFlujo.INGRESO:
+        if cuenta_locked is not None:
+            cuenta_locked.monto_cobrado = max(
+                Decimal("0.00"), cuenta_locked.monto_cobrado - old_monto
+            ).quantize(Decimal("0.01"))
+            cuenta_locked.saldo_pendiente = (
+                cuenta_locked.monto_facturado - cuenta_locked.monto_cobrado
+            ).quantize(Decimal("0.01"))
+        if orden_locked is not None:
+            orden_locked.saldo_pendiente = min(
+                orden_locked.monto_total, orden_locked.saldo_pendiente + old_monto
+            ).quantize(Decimal("0.01"))
+
+    # 2) Si el nuevo estado es INGRESO vinculado, aplicamos el nuevo importe validando tope
+    if new_tipo == MovimientoFinanciero.TipoFlujo.INGRESO:
+        if cuenta_locked is not None:
+            if new_monto > cuenta_locked.saldo_pendiente:
+                raise ValidationError(
+                    {
+                        "detail": (
+                            f"El nuevo importe (${new_monto}) supera el saldo disponible de la "
+                            f"Factura {cuenta_locked.nro_factura} (${cuenta_locked.saldo_pendiente})."
+                        )
+                    }
+                )
+            cuenta_locked.monto_cobrado = (
+                cuenta_locked.monto_cobrado + new_monto
+            ).quantize(Decimal("0.01"))
+            cuenta_locked.saldo_pendiente = (
+                cuenta_locked.monto_facturado - cuenta_locked.monto_cobrado
+            ).quantize(Decimal("0.01"))
+            _recalcular_estado_cuenta(cuenta_locked)
+            cuenta_locked.save(
+                update_fields=["monto_cobrado", "saldo_pendiente", "estado_cobranza"]
+            )
+            if orden_locked is not None:
+                orden_locked.saldo_pendiente = max(
+                    Decimal("0.00"), orden_locked.saldo_pendiente - new_monto
+                ).quantize(Decimal("0.01"))
+                orden_locked.save(update_fields=["saldo_pendiente"])
+        elif orden_locked is not None:
+            if new_monto > orden_locked.saldo_pendiente:
+                raise ValidationError(
+                    {
+                        "detail": (
+                            f"El nuevo importe (${new_monto}) supera el saldo disponible de la "
+                            f"Orden {orden_locked.codigo_seguimiento} (${orden_locked.saldo_pendiente})."
+                        )
+                    }
+                )
+            orden_locked.saldo_pendiente = (
+                orden_locked.saldo_pendiente - new_monto
+            ).quantize(Decimal("0.01"))
+            orden_locked.save(update_fields=["saldo_pendiente"])
+    else:
+        # Si pasó de ingreso a egreso y tenía cuenta/orden, guardamos la reversión
+        if cuenta_locked is not None:
+            _recalcular_estado_cuenta(cuenta_locked)
+            cuenta_locked.save(
+                update_fields=["monto_cobrado", "saldo_pendiente", "estado_cobranza"]
+            )
+        if orden_locked is not None:
+            orden_locked.save(update_fields=["saldo_pendiente"])
+
+    mov.tipo = new_tipo
+    mov.categoria = new_categoria[:30]
+    mov.concepto = new_concepto[:120]
+    mov.monto = new_monto
+    mov.medio_pago = new_medio_pago
+    mov.fecha = new_fecha
+    mov.save()
+
+    return {
+        "detail": f"Movimiento financiero #{mov.id_movimiento} actualizado correctamente (${new_monto}).",
+        "movimiento": mov,
+        "cuenta": cuenta_locked,
+    }
+
+
+@transaction.atomic
+def eliminar_movimiento_financiero(*, movimiento: MovimientoFinanciero) -> dict:
+    """
+    Elimina un MovimientoFinanciero y revierte su impacto en CuentaPorCobrar / OrdenDeTrabajo si correspondía.
+    """
+    mov = MovimientoFinanciero.objects.select_for_update().get(pk=movimiento.pk)
+    if mov.tipo == MovimientoFinanciero.TipoFlujo.INGRESO:
+        if mov.cuenta_id:
+            cuenta_locked = CuentaPorCobrar.objects.select_for_update().get(pk=mov.cuenta_id)
+            cuenta_locked.monto_cobrado = max(
+                Decimal("0.00"), cuenta_locked.monto_cobrado - mov.monto
+            ).quantize(Decimal("0.01"))
+            cuenta_locked.saldo_pendiente = (
+                cuenta_locked.monto_facturado - cuenta_locked.monto_cobrado
+            ).quantize(Decimal("0.01"))
+            _recalcular_estado_cuenta(cuenta_locked)
+            cuenta_locked.save(
+                update_fields=["monto_cobrado", "saldo_pendiente", "estado_cobranza"]
+            )
+            orden_locked = OrdenDeTrabajo.objects.select_for_update().get(pk=cuenta_locked.orden_id)
+            orden_locked.saldo_pendiente = min(
+                orden_locked.monto_total, orden_locked.saldo_pendiente + mov.monto
+            ).quantize(Decimal("0.01"))
+            orden_locked.save(update_fields=["saldo_pendiente"])
+        elif mov.orden_id:
+            orden_locked = OrdenDeTrabajo.objects.select_for_update().get(pk=mov.orden_id)
+            orden_locked.saldo_pendiente = min(
+                orden_locked.monto_total, orden_locked.saldo_pendiente + mov.monto
+            ).quantize(Decimal("0.01"))
+            orden_locked.save(update_fields=["saldo_pendiente"])
+
+    mov_id = mov.id_movimiento
+    mov.delete()
+    return {"detail": f"Movimiento financiero #{mov_id} eliminado correctamente."}
+
+
 def calcular_kpis_dashboard() -> dict:
     """
     HU-014 Criterio 3 (Prototipo 1 – Dashboard Principal):

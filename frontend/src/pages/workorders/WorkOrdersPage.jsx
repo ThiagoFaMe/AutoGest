@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { getOrdenesTrabajo } from "../../api/workordersApi";
+import {
+  getOrdenesTrabajo,
+  registrarEntregaVehiculo,
+} from "../../api/workordersApi";
+import { useAuth } from "../../context/AuthContext";
 import WorkOrderDetailModal from "./WorkOrderDetailModal";
 
 const formatDateShort = (dateStr) => {
@@ -10,11 +14,16 @@ const formatDateShort = (dateStr) => {
 };
 
 export default function WorkOrdersPage() {
+  const { user } = useAuth();
   const [ordenes, setOrdenes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filterMode, setFilterMode] = useState("activas"); // "activas" | "retrasadas" | "todas"
+  const [filterMode, setFilterMode] = useState("activas"); // "activas" | "retrasadas" | "entregadas" | "todas"
   const [selectedOrden, setSelectedOrden] = useState(null);
+  const [deliveringId, setDeliveringId] = useState(null);
+
+  const canRegisterDelivery =
+    user?.rol === "administrador" || user?.rol === "administrativo";
 
   const fetchOrdenes = async () => {
     setLoading(true);
@@ -41,6 +50,34 @@ export default function WorkOrdersPage() {
     );
   };
 
+  const handleQuickEntrega = async (orden) => {
+    if (
+      !window.confirm(
+        `¿Confirmar la entrega efectiva del vehículo ${orden.vehiculo_patente} (${orden.vehiculo_descripcion}) al cliente ${orden.cliente_nombre}?`
+      )
+    ) {
+      return;
+    }
+    setDeliveringId(orden.id_orden);
+    try {
+      const resp = await registrarEntregaVehiculo(orden.id_orden);
+      if (resp?.orden) {
+        setOrdenes((prev) =>
+          prev.map((o) => (o.id_orden === resp.orden.id_orden ? resp.orden : o))
+        );
+      } else {
+        fetchOrdenes();
+      }
+    } catch (err) {
+      alert(
+        err.response?.data?.detail ||
+          "No se pudo registrar la entrega del vehículo."
+      );
+    } finally {
+      setDeliveringId(null);
+    }
+  };
+
   const filteredOrdenes = ordenes.filter((o) => {
     const q = search.trim().toLowerCase();
     const matchesSearch =
@@ -53,6 +90,7 @@ export default function WorkOrdersPage() {
 
     if (!matchesSearch) return false;
     if (filterMode === "retrasadas") return o.en_retraso === true;
+    if (filterMode === "entregadas") return Boolean(o.fecha_entrega_real);
     if (filterMode === "activas") return !o.fecha_entrega_real;
     return true;
   });
@@ -62,6 +100,9 @@ export default function WorkOrdersPage() {
   const totalListas = ordenes.filter(
     (o) => o.estado_actual === "Lista para entrega" && !o.fecha_entrega_real
   ).length;
+  const totalEntregadas = ordenes.filter((o) =>
+    Boolean(o.fecha_entrega_real)
+  ).length;
 
   return (
     <div>
@@ -70,7 +111,7 @@ export default function WorkOrdersPage() {
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-wrench-adjustable-circle-fill text-primary me-2"></i>
-            Tablero de Órdenes de Trabajo en Planta (HU-008 y HU-009)
+            Tablero de Órdenes de Trabajo en Planta
           </h4>
           <p className="text-muted small mb-0">
             Seguimiento secuencial de las 8 fases operativas de taller, control de tiempos por etapa y alertas de retraso.
@@ -87,10 +128,14 @@ export default function WorkOrdersPage() {
         </button>
       </div>
 
-      {/* Indicadores Operativos Rápidos */}
+      {/* 4 Indicadores Operativos Rápidos */}
       <div className="row g-3 mb-4">
-        <div className="col-md-4">
-          <div className="card border-0 shadow-sm border-start border-primary border-4">
+        <div className="col-sm-6 col-xl-3">
+          <div
+            className="card border-0 shadow-sm border-start border-primary border-4 h-100"
+            role="button"
+            onClick={() => setFilterMode("activas")}
+          >
             <div className="card-body py-3 d-flex justify-content-between align-items-center">
               <div>
                 <div className="text-muted small fw-semibold">
@@ -103,12 +148,16 @@ export default function WorkOrdersPage() {
           </div>
         </div>
 
-        <div className="col-md-4">
-          <div className="card border-0 shadow-sm border-start border-danger border-4">
+        <div className="col-sm-6 col-xl-3">
+          <div
+            className="card border-0 shadow-sm border-start border-danger border-4 h-100"
+            role="button"
+            onClick={() => setFilterMode("retrasadas")}
+          >
             <div className="card-body py-3 d-flex justify-content-between align-items-center">
               <div>
                 <div className="text-muted small fw-semibold">
-                  UNIDADES EN RETRASO (HU-009)
+                  UNIDADES EN RETRASO
                 </div>
                 <div className="fs-3 fw-bold text-danger">{totalRetrasadas}</div>
               </div>
@@ -117,8 +166,8 @@ export default function WorkOrdersPage() {
           </div>
         </div>
 
-        <div className="col-md-4">
-          <div className="card border-0 shadow-sm border-start border-success border-4">
+        <div className="col-sm-6 col-xl-3">
+          <div className="card border-0 shadow-sm border-start border-success border-4 h-100">
             <div className="card-body py-3 d-flex justify-content-between align-items-center">
               <div>
                 <div className="text-muted small fw-semibold">
@@ -127,6 +176,24 @@ export default function WorkOrdersPage() {
                 <div className="fs-3 fw-bold text-success">{totalListas}</div>
               </div>
               <i className="bi bi-check2-circle fs-1 text-success opacity-50"></i>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-sm-6 col-xl-3">
+          <div
+            className="card border-0 shadow-sm border-start border-dark border-4 h-100"
+            role="button"
+            onClick={() => setFilterMode("entregadas")}
+          >
+            <div className="card-body py-3 d-flex justify-content-between align-items-center">
+              <div>
+                <div className="text-muted small fw-semibold">
+                  YA ENTREGADAS
+                </div>
+                <div className="fs-3 fw-bold text-dark">{totalEntregadas}</div>
+              </div>
+              <i className="bi bi-key-fill fs-1 text-secondary opacity-50"></i>
             </div>
           </div>
         </div>
@@ -148,11 +215,13 @@ export default function WorkOrdersPage() {
             />
           </div>
 
-          <div className="btn-group">
+          <div className="btn-group flex-wrap">
             <button
               type="button"
               className={`btn btn-sm ${
-                filterMode === "activas" ? "btn-primary" : "btn-outline-secondary"
+                filterMode === "activas"
+                  ? "btn-primary fw-semibold"
+                  : "btn-outline-secondary"
               }`}
               onClick={() => setFilterMode("activas")}
             >
@@ -162,7 +231,7 @@ export default function WorkOrdersPage() {
               type="button"
               className={`btn btn-sm ${
                 filterMode === "retrasadas"
-                  ? "btn-danger"
+                  ? "btn-danger fw-semibold"
                   : "btn-outline-secondary"
               }`}
               onClick={() => setFilterMode("retrasadas")}
@@ -172,7 +241,20 @@ export default function WorkOrdersPage() {
             <button
               type="button"
               className={`btn btn-sm ${
-                filterMode === "todas" ? "btn-dark" : "btn-outline-secondary"
+                filterMode === "entregadas"
+                  ? "btn-success fw-semibold"
+                  : "btn-outline-secondary"
+              }`}
+              onClick={() => setFilterMode("entregadas")}
+            >
+              Entregadas ({totalEntregadas})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${
+                filterMode === "todas"
+                  ? "btn-dark fw-semibold"
+                  : "btn-outline-secondary"
               }`}
               onClick={() => setFilterMode("todas")}
             >
@@ -199,7 +281,11 @@ export default function WorkOrdersPage() {
             <div key={orden.id_orden} className="col-md-6 col-xl-4">
               <div
                 className={`card h-100 shadow-sm border-0 ${
-                  orden.en_retraso ? "border-top border-danger border-4" : ""
+                  orden.en_retraso
+                    ? "border-top border-danger border-4"
+                    : orden.fecha_entrega_real
+                    ? "border-top border-success border-4"
+                    : ""
                 }`}
               >
                 <div className="card-body d-flex flex-column justify-content-between">
@@ -222,13 +308,16 @@ export default function WorkOrdersPage() {
                         </span>
                       </div>
 
-                      {orden.en_retraso ? (
+                      {orden.fecha_entrega_real ? (
+                        <span className="badge bg-success">
+                          <i className="bi bi-check2-all me-1"></i>
+                          Entregado ({formatDateShort(orden.fecha_entrega_real)})
+                        </span>
+                      ) : orden.en_retraso ? (
                         <span className="badge bg-danger">
                           <i className="bi bi-exclamation-triangle-fill me-1"></i>
                           +{orden.dias_retraso}d retraso
                         </span>
-                      ) : orden.fecha_entrega_real ? (
-                        <span className="badge bg-success">Entregado</span>
                       ) : (
                         <span className="badge bg-success-subtle text-success border border-success-subtle">
                           En término
@@ -287,14 +376,32 @@ export default function WorkOrdersPage() {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    className="btn btn-primary w-100 fw-semibold d-flex align-items-center justify-content-center gap-2"
-                    onClick={() => setSelectedOrden(orden)}
-                  >
-                    <i className="bi bi-diagram-3-fill"></i>
-                    Abrir Línea de Tiempo / Avanzar Etapa
-                  </button>
+                  <div className="d-flex flex-column gap-2">
+                    {orden.estado_actual === "Lista para entrega" &&
+                      !orden.fecha_entrega_real &&
+                      canRegisterDelivery && (
+                        <button
+                          type="button"
+                          className="btn btn-success w-100 fw-semibold d-flex align-items-center justify-content-center gap-2"
+                          disabled={deliveringId === orden.id_orden}
+                          onClick={() => handleQuickEntrega(orden)}
+                        >
+                          <i className="bi bi-key-fill"></i>
+                          {deliveringId === orden.id_orden
+                            ? "Registrando entrega..."
+                            : "Registrar Entrega al Cliente"}
+                        </button>
+                      )}
+
+                    <button
+                      type="button"
+                      className="btn btn-primary w-100 fw-semibold d-flex align-items-center justify-content-center gap-2"
+                      onClick={() => setSelectedOrden(orden)}
+                    >
+                      <i className="bi bi-diagram-3-fill"></i>
+                      Abrir Línea de Tiempo / Avanzar Etapa
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -302,7 +409,7 @@ export default function WorkOrdersPage() {
         </div>
       )}
 
-      {/* Modal de Línea de Tiempo Secuencial (Prototipo 2) */}
+      {/* Modal de Línea de Tiempo Secuencial */}
       {selectedOrden && (
         <WorkOrderDetailModal
           orden={selectedOrden}

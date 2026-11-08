@@ -18,11 +18,18 @@ from apps.users.models import Usuario
 
 
 class Command(BaseCommand):
-    help = "Inicializa datos maestros realistas de Taller Sergio para demostración del Sprint 1."
+    help = "Inicializa únicamente los perfiles de usuario de Taller Sergio (o datos demo si se pasa --demo)."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--demo",
+            action="store_true",
+            help="Carga además los datos de demostración (clientes, vehículos, presupuestos, órdenes, stock y facturas).",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
-        self.stdout.write("Verificando y cargando datos iniciales de Taller Sergio (Sprint 1)...")
+        self.stdout.write("Verificando perfiles de usuario de Taller Sergio...")
 
         usuarios_demo = [
             {
@@ -68,6 +75,14 @@ class Command(BaseCommand):
             if created:
                 user.set_password(pwd)
                 user.save()
+
+        if not options.get("demo"):
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "Usuarios verificados. Omitiendo carga de datos de prueba (sistema limpio)."
+                )
+            )
+            return
 
         aseguradoras_demo = [
             {

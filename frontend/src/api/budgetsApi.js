@@ -30,6 +30,11 @@ export const rechazarPresupuesto = async (id, payload = {}) => {
   return data;
 };
 
+export const deletePresupuesto = async (id) => {
+  const { data } = await axiosClient.delete(`/budgets/presupuestos/${id}/`);
+  return data;
+};
+
 export const getOrdenesTrabajo = async (params = {}) => {
   const { data } = await axiosClient.get("/workorders/ordenes/", { params });
   return data;

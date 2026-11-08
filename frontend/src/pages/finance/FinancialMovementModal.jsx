@@ -1,5 +1,8 @@
 import React, { useState } from "react";
-import { registrarMovimientoFinanciero } from "../../api/financeApi";
+import {
+  actualizarMovimientoFinanciero,
+  registrarMovimientoFinanciero,
+} from "../../api/financeApi";
 
 const CATEGORIAS_INGRESO = [
   "Liquidación Aseguradora",
@@ -15,15 +18,24 @@ const CATEGORIAS_EGRESO = [
 
 export default function FinancialMovementModal({
   preselectedCuenta,
+  editingMovement,
   defaultTipo = "ingreso",
   onClose,
   onSuccess,
 }) {
+  const isEditing = Boolean(editingMovement);
+
   const [tipo, setTipo] = useState(
-    preselectedCuenta ? "ingreso" : defaultTipo
+    isEditing
+      ? editingMovement.tipo
+      : preselectedCuenta
+      ? "ingreso"
+      : defaultTipo
   );
   const [categoria, setCategoria] = useState(
-    preselectedCuenta
+    isEditing
+      ? editingMovement.categoria
+      : preselectedCuenta
       ? preselectedCuenta.id_compania
         ? "Liquidación Aseguradora"
         : "Cobro Particular"
@@ -32,17 +44,31 @@ export default function FinancialMovementModal({
       : "Compra Insumos"
   );
   const [concepto, setConcepto] = useState(
-    preselectedCuenta
+    isEditing
+      ? editingMovement.concepto
+      : preselectedCuenta
       ? `Cobro Factura ${preselectedCuenta.nro_factura} (${preselectedCuenta.orden_codigo})`
       : ""
   );
   const [monto, setMonto] = useState(
-    preselectedCuenta ? preselectedCuenta.saldo_pendiente : ""
+    isEditing
+      ? editingMovement.monto
+      : preselectedCuenta
+      ? preselectedCuenta.saldo_pendiente
+      : ""
   );
   const [medioPago, setMedioPago] = useState(
-    preselectedCuenta?.id_compania ? "e-cheq" : "transferencia"
+    isEditing
+      ? editingMovement.medio_pago
+      : preselectedCuenta?.id_compania
+      ? "e-cheq"
+      : "transferencia"
   );
-  const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
+  const [fecha, setFecha] = useState(
+    isEditing && editingMovement.fecha
+      ? String(editingMovement.fecha).split("T")[0]
+      : new Date().toISOString().split("T")[0]
+  );
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -58,16 +84,31 @@ export default function FinancialMovementModal({
     setErrorMsg("");
     setLoading(true);
     try {
-      const resp = await registrarMovimientoFinanciero({
-        fecha,
-        tipo,
-        categoria,
-        concepto: concepto.trim(),
-        monto,
-        medio_pago: medioPago,
-        id_cuenta: preselectedCuenta ? preselectedCuenta.id_cuenta : null,
-        id_orden: preselectedCuenta ? preselectedCuenta.id_orden : null,
-      });
+      let resp;
+      if (isEditing) {
+        resp = await actualizarMovimientoFinanciero(
+          editingMovement.id_movimiento,
+          {
+            fecha,
+            tipo,
+            categoria,
+            concepto: concepto.trim(),
+            monto,
+            medio_pago: medioPago,
+          }
+        );
+      } else {
+        resp = await registrarMovimientoFinanciero({
+          fecha,
+          tipo,
+          categoria,
+          concepto: concepto.trim(),
+          monto,
+          medio_pago: medioPago,
+          id_cuenta: preselectedCuenta ? preselectedCuenta.id_cuenta : null,
+          id_orden: preselectedCuenta ? preselectedCuenta.id_orden : null,
+        });
+      }
       if (onSuccess) onSuccess(resp);
     } catch (err) {
       const data = err.response?.data;
@@ -77,7 +118,7 @@ export default function FinancialMovementModal({
           Object.entries(data)
             .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(" ") : v}`)
             .join(" | ")) ||
-        "No se pudo registrar el movimiento financiero.";
+        "No se pudo guardar el movimiento financiero.";
       setErrorMsg(msg);
     } finally {
       setLoading(false);
@@ -101,9 +142,11 @@ export default function FinancialMovementModal({
           >
             <h5 className="modal-title fw-bold">
               <i className="bi bi-cash-coin me-2"></i>
-              {preselectedCuenta
-                ? `Imputar Cobro a Factura ${preselectedCuenta.nro_factura} (HU-013)`
-                : "Registrar Movimiento Financiero de Caja (HU-014)"}
+              {isEditing
+                ? `Editar Movimiento Financiero #${editingMovement.id_movimiento}`
+                : preselectedCuenta
+                ? `Imputar Cobro a Factura ${preselectedCuenta.nro_factura}`
+                : "Registrar Movimiento Financiero de Caja"}
             </h5>
             <button
               type="button"
@@ -136,6 +179,24 @@ export default function FinancialMovementModal({
                         preselectedCuenta.saldo_pendiente
                       ).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                     </strong>
+                  </div>
+                </div>
+              ) : isEditing &&
+                (editingMovement.nro_factura || editingMovement.orden_codigo) ? (
+                <div className="p-2 rounded bg-light border mb-3 small">
+                  <strong>Vinculado a:</strong>{" "}
+                  {editingMovement.nro_factura && (
+                    <span className="badge bg-primary me-1">
+                      Factura {editingMovement.nro_factura}
+                    </span>
+                  )}
+                  {editingMovement.orden_codigo && (
+                    <span className="badge bg-dark">
+                      {editingMovement.orden_codigo}
+                    </span>
+                  )}
+                  <div className="text-muted mt-1">
+                    Al modificar el importe, el saldo pendiente de la cuenta/orden se recalculará automáticamente.
                   </div>
                 </div>
               ) : (
@@ -268,7 +329,9 @@ export default function FinancialMovementModal({
                 disabled={loading}
               >
                 {loading
-                  ? "Registrando..."
+                  ? "Guardando..."
+                  : isEditing
+                  ? "Guardar Cambios"
                   : tipo === "ingreso"
                   ? "Confirmar Cobro"
                   : "Confirmar Egreso"}

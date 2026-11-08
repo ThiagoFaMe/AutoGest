@@ -83,12 +83,16 @@ class Presupuesto(models.Model):
     vehiculo = models.ForeignKey(
         Vehiculo,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="presupuestos",
         db_column="id_vehiculo",
     )
     cliente = models.ForeignKey(
         Cliente,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="presupuestos",
         db_column="id_cliente",
     )
@@ -130,7 +134,8 @@ class Presupuesto(models.Model):
         ordering = ["-id_presupuesto"]
 
     def __str__(self):
-        return f"PRES-{self.id_presupuesto:04d} ({self.vehiculo.patente} - {self.estado})"
+        pat = self.vehiculo.patente if self.vehiculo else "SIN-VEHICULO"
+        return f"PRES-{self.id_presupuesto:04d} ({pat} - {self.estado})"
 
     @property
     def dias_espera_aprobacion(self) -> int:

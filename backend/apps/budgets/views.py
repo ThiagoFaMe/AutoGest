@@ -11,6 +11,7 @@ from .models import Presupuesto
 from .serializers import AprobarPresupuestoSerializer, PresupuestoSerializer
 from .services import (
     aprobar_presupuesto_y_crear_ot,
+    eliminar_presupuesto,
     emitir_presupuesto,
     rechazar_presupuesto,
 )
@@ -48,6 +49,8 @@ class PresupuestoViewSet(viewsets.ModelViewSet):
                 | Q(cliente__dni__icontains=search)
                 | Q(nro_siniestro__icontains=search)
                 | Q(compania__razon_social__icontains=search)
+                | Q(detalle_libre__icontains=search)
+                | Q(observaciones__icontains=search)
             )
         return qs
 
@@ -86,6 +89,12 @@ class PresupuestoViewSet(viewsets.ModelViewSet):
             fecha_estimada_entrega=req_serializer.validated_data["fecha_estimada_entrega"],
             fecha_ingreso=req_serializer.validated_data.get("fecha_ingreso"),
             nro_orden_aseguradora=req_serializer.validated_data.get("nro_orden_aseguradora", ""),
+            nro_siniestro=req_serializer.validated_data.get("nro_siniestro", ""),
+            nombre_perito=req_serializer.validated_data.get("nombre_perito", ""),
+            id_cliente=req_serializer.validated_data.get("id_cliente"),
+            id_vehiculo=req_serializer.validated_data.get("id_vehiculo"),
+            nuevo_cliente=req_serializer.validated_data.get("nuevo_cliente"),
+            nuevo_vehiculo=req_serializer.validated_data.get("nuevo_vehiculo"),
         )
         presupuesto.refresh_from_db()
         return Response(
@@ -114,3 +123,8 @@ class PresupuestoViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    def destroy(self, request, *args, **kwargs):
+        presupuesto = self.get_object()
+        res = eliminar_presupuesto(presupuesto)
+        return Response(res, status=status.HTTP_200_OK)

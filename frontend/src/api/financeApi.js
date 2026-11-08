@@ -30,3 +30,18 @@ export const registrarMovimientoFinanciero = async (payload) => {
   );
   return data;
 };
+
+export const actualizarMovimientoFinanciero = async (idMovimiento, payload) => {
+  const { data } = await axiosClient.patch(
+    `/finance/movimientos/${idMovimiento}/`,
+    payload
+  );
+  return data;
+};
+
+export const eliminarMovimientoFinanciero = async (idMovimiento) => {
+  const { data } = await axiosClient.delete(
+    `/finance/movimientos/${idMovimiento}/`
+  );
+  return data;
+};

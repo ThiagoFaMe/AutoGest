@@ -10,6 +10,7 @@ from decimal import Decimal
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
+from apps.core.models import Cliente, Vehiculo
 from apps.workorders.models import FASES_TALLER_DEFINICION, FaseReparacion, OrdenDeTrabajo
 from .models import ItemPresupuesto, Presupuesto
 
@@ -26,26 +27,21 @@ def _to_decimal(val) -> Decimal:
 
 
 def validate_budget_modality_rules(
-    *, tipo: str, compania, nro_siniestro: str, nombre_perito: str
+    *, tipo: str, compania, nro_siniestro: str = "", nombre_perito: str = ""
 ):
     """
-    HU-006 Criterio 1:
-    Si el tipo es "aseguradora", exige obligatoriamente seleccionar la compañía aseguradora,
-    ingresar el número de siniestro y el nombre del perito liquidador.
+    HU-006:
+    Si el tipo es "aseguradora", exige seleccionar la compañía aseguradora.
+    El número de siniestro y el nombre del perito liquidador son opcionales al confeccionar
+    el presupuesto (ya que el cliente suele solicitar el presupuesto antes de tener asignado
+    siniestro o perito por parte de la compañía).
     """
     if tipo == Presupuesto.Tipo.ASEGURADORA:
-        missing = []
         if not compania:
-            missing.append("compañía aseguradora")
-        if not (nro_siniestro or "").strip():
-            missing.append("número de siniestro")
-        if not (nombre_perito or "").strip():
-            missing.append("nombre del perito liquidador")
-        if missing:
             raise ValidationError(
                 {
                     "modalidad_aseguradora": (
-                        f"Para presupuestos de Compañía Aseguradora es obligatorio indicar: {', '.join(missing)}."
+                        "Para presupuestos de Compañía Aseguradora es obligatorio seleccionar la compañía aseguradora."
                     )
                 }
             )
@@ -197,17 +193,20 @@ def recalculate_budget_totals(presupuesto: Presupuesto) -> Presupuesto:
     presupuesto.save(
         update_fields=["monto_mano_obra", "monto_repuestos", "monto_total"]
     )
+
+    if hasattr(presupuesto, "orden_trabajo"):
+        ot = presupuesto.orden_trabajo
+        diff = presupuesto.monto_total - ot.monto_total
+        ot.monto_total = presupuesto.monto_total
+        ot.saldo_pendiente = max(Decimal("0.00"), ot.saldo_pendiente + diff)
+        ot.save(update_fields=["monto_total", "saldo_pendiente"])
+
     return presupuesto
 
 
 @transaction.atomic
 def sync_budget_items(presupuesto: Presupuesto, items_data: list) -> Presupuesto:
-    """Reemplaza la lista de ítems de un presupuesto en borrador/emitido y recalcula totales."""
-    if presupuesto.estado not in (Presupuesto.Estado.BORRADOR, Presupuesto.Estado.EMITIDO):
-        raise ValidationError(
-            "Solo se pueden modificar los ítems de un presupuesto en estado Borrador o Emitido."
-        )
-
+    """Reemplaza la lista de ítems de un presupuesto y recalcula totales."""
     presupuesto.items.all().delete()
     for idx_data in items_data:
         cantidad = int(idx_data.get("cantidad", 1))
@@ -233,14 +232,9 @@ def emitir_presupuesto(presupuesto: Presupuesto) -> Presupuesto:
     """
     HU-005 Criterios 2 y 3:
     - Bloquea la emisión si no posee ítems cargados o si el monto total es <= 0.
-    - Asigna estado "emitido", registra fecha_emision = hoy y calcula fecha_vencimiento (+15 días).
+    - Asigna estado "emitido" (salvo que ya tenga OT aprobada), registra fecha_emision = hoy y calcula fecha_vencimiento (+15 días).
     """
     presupuesto = recalculate_budget_totals(presupuesto)
-
-    if presupuesto.estado not in (Presupuesto.Estado.BORRADOR, Presupuesto.Estado.EMITIDO):
-        raise ValidationError(
-            f"No se puede emitir un presupuesto que ya se encuentra en estado '{presupuesto.estado}'."
-        )
 
     validate_budget_modality_rules(
         tipo=presupuesto.tipo,
@@ -254,6 +248,9 @@ def emitir_presupuesto(presupuesto: Presupuesto) -> Presupuesto:
             "No se puede emitir un presupuesto sin detalle o con importe total en cero. "
             "Ingrese el detalle e importe de la cotización."
         )
+
+    if presupuesto.estado == Presupuesto.Estado.APROBADO:
+        return presupuesto
 
     hoy = date.today()
     presupuesto.estado = Presupuesto.Estado.EMITIDO
@@ -277,15 +274,23 @@ def aprobar_presupuesto_y_crear_ot(
     presupuesto: Presupuesto,
     fecha_estimada_entrega: date,
     nro_orden_aseguradora: str = "",
+    nro_siniestro: str = "",
+    nombre_perito: str = "",
     fecha_ingreso: date = None,
+    id_cliente: int | None = None,
+    id_vehiculo: int | None = None,
+    nuevo_cliente: dict | None = None,
+    nuevo_vehiculo: dict | None = None,
 ) -> OrdenDeTrabajo:
     """
     HU-007 Criterios 1, 2 y 3:
     1. Valida relación 1:1 (bloquea si ya tiene OT o si está Rechazado/Vencido).
     2. Exige que el presupuesto esté en estado "emitido".
-    3. Cambia estado del presupuesto a "aprobado".
-    4. Crea automáticamente la OrdenDeTrabajo con saldo_pendiente = monto_total.
-    5. Inicializa en FaseReparacion las 8 fases operativas del taller ordenadas secuencialmente del 1 al 8.
+    3. Si el presupuesto fue emitido sin empadronar Cliente/Vehículo, permite crearlos
+       o vincularlos en el mismo acto de aprobación.
+    4. Cambia estado del presupuesto a "aprobado".
+    5. Crea automáticamente la OrdenDeTrabajo con saldo_pendiente = monto_total.
+    6. Inicializa en FaseReparacion las 8 fases operativas del taller ordenadas secuencialmente del 1 al 8.
     """
     presupuesto = Presupuesto.objects.select_for_update().get(pk=presupuesto.pk)
 
@@ -304,19 +309,98 @@ def aprobar_presupuesto_y_crear_ot(
             "El presupuesto debe encontrarse en estado 'Emitido' antes de poder registrarse su aprobación."
         )
 
-    if presupuesto.tipo == Presupuesto.Tipo.ASEGURADORA and not (nro_orden_aseguradora or "").strip():
-        raise ValidationError(
-            {"nro_orden_aseguradora": "Para aprobar un presupuesto de aseguradora debe ingresar el número de orden de reparación pericial."}
-        )
-
     ingreso = fecha_ingreso or date.today()
     if fecha_estimada_entrega < ingreso:
         raise ValidationError(
             {"fecha_estimada_entrega": "La fecha estimada de entrega no puede ser anterior a la fecha de ingreso."}
         )
 
+    # Resolución / alta en el acto del Cliente si el presupuesto aún no tenía cliente vinculado
+    cliente_obj = presupuesto.cliente
+    if id_cliente:
+        cliente_obj = Cliente.objects.filter(pk=id_cliente).first()
+        if not cliente_obj:
+            raise ValidationError({"id_cliente": "El cliente seleccionado no existe."})
+    elif nuevo_cliente:
+        dni_clean = (nuevo_cliente.get("dni") or "").strip()
+        if not dni_clean:
+            raise ValidationError({"nuevo_cliente": "El DNI del cliente es obligatorio para darlo de alta."})
+        cliente_obj, created = Cliente.objects.get_or_create(
+            dni=dni_clean,
+            defaults={
+                "nombre": (nuevo_cliente.get("nombre") or "").strip(),
+                "apellido": (nuevo_cliente.get("apellido") or "").strip(),
+                "telefono": (nuevo_cliente.get("telefono") or "").strip(),
+                "email": (nuevo_cliente.get("email") or "").strip(),
+                "direccion": (nuevo_cliente.get("direccion") or "").strip(),
+                "activo": True,
+            },
+        )
+        if not created:
+            cliente_obj.nombre = (nuevo_cliente.get("nombre") or cliente_obj.nombre).strip()
+            cliente_obj.apellido = (nuevo_cliente.get("apellido") or cliente_obj.apellido).strip()
+            cliente_obj.telefono = (nuevo_cliente.get("telefono") or cliente_obj.telefono).strip()
+            if nuevo_cliente.get("direccion"):
+                cliente_obj.direccion = nuevo_cliente["direccion"].strip()
+            if nuevo_cliente.get("email"):
+                cliente_obj.email = nuevo_cliente["email"].strip()
+            cliente_obj.activo = True
+            cliente_obj.save()
+
+    # Resolución / alta en el acto del Vehículo si el presupuesto aún no tenía vehículo vinculado
+    vehiculo_obj = presupuesto.vehiculo
+    if id_vehiculo:
+        vehiculo_obj = Vehiculo.objects.filter(pk=id_vehiculo).first()
+        if not vehiculo_obj:
+            raise ValidationError({"id_vehiculo": "El vehículo seleccionado no existe."})
+        if not cliente_obj:
+            cliente_obj = vehiculo_obj.cliente
+    elif nuevo_vehiculo:
+        if not cliente_obj:
+            raise ValidationError(
+                {"cliente": "Para registrar el vehículo nuevo al aprobar el presupuesto debe indicar o crear su cliente titular."}
+            )
+        pat_clean = (nuevo_vehiculo.get("patente") or "").upper().replace(" ", "").replace("-", "")
+        if not pat_clean:
+            raise ValidationError({"nuevo_vehiculo": "La patente del vehículo es obligatoria."})
+        vehiculo_obj, created = Vehiculo.objects.get_or_create(
+            patente=pat_clean,
+            defaults={
+                "marca": (nuevo_vehiculo.get("marca") or "").strip(),
+                "modelo": (nuevo_vehiculo.get("modelo") or "").strip(),
+                "anio": int(nuevo_vehiculo.get("anio") or date.today().year),
+                "color": (nuevo_vehiculo.get("color") or "").strip(),
+                "cliente": cliente_obj,
+            },
+        )
+        if not created:
+            vehiculo_obj.marca = (nuevo_vehiculo.get("marca") or vehiculo_obj.marca).strip()
+            vehiculo_obj.modelo = (nuevo_vehiculo.get("modelo") or vehiculo_obj.modelo).strip()
+            if nuevo_vehiculo.get("anio"):
+                vehiculo_obj.anio = int(nuevo_vehiculo["anio"])
+            if nuevo_vehiculo.get("color"):
+                vehiculo_obj.color = nuevo_vehiculo["color"].strip()
+            vehiculo_obj.cliente = cliente_obj
+            vehiculo_obj.save()
+
+    if not cliente_obj or not vehiculo_obj:
+        raise ValidationError(
+            {
+                "detail": (
+                    "Como el presupuesto fue aceptado, es necesario completar los datos del Cliente "
+                    "y del Vehículo para crearlos y abrir la Orden de Trabajo."
+                )
+            }
+        )
+
+    presupuesto.cliente = cliente_obj
+    presupuesto.vehiculo = vehiculo_obj
+    if (nro_siniestro or "").strip():
+        presupuesto.nro_siniestro = nro_siniestro.strip()
+    if (nombre_perito or "").strip():
+        presupuesto.nombre_perito = nombre_perito.strip()
     presupuesto.estado = Presupuesto.Estado.APROBADO
-    presupuesto.save(update_fields=["estado"])
+    presupuesto.save(update_fields=["cliente", "vehiculo", "nro_siniestro", "nombre_perito", "estado"])
 
     orden = OrdenDeTrabajo.objects.create(
         codigo_seguimiento=_generate_next_ot_code(),
@@ -327,7 +411,7 @@ def aprobar_presupuesto_y_crear_ot(
         estado_actual="Recepción",
         monto_total=presupuesto.monto_total,
         saldo_pendiente=presupuesto.monto_total,
-        vehiculo=presupuesto.vehiculo,
+        vehiculo=vehiculo_obj,
         compania=presupuesto.compania if presupuesto.tipo == Presupuesto.Tipo.ASEGURADORA else None,
         presupuesto=presupuesto,
     )
@@ -359,3 +443,21 @@ def rechazar_presupuesto(presupuesto: Presupuesto, observaciones: str = "") -> P
         presupuesto.observaciones = observaciones.strip()
     presupuesto.save(update_fields=["estado", "observaciones"])
     return presupuesto
+
+
+@transaction.atomic
+def eliminar_presupuesto(presupuesto: Presupuesto) -> dict:
+    """
+    Elimina un Presupuesto de forma segura. Si tenía una Orden de Trabajo asociada,
+    limpia primero sus registros dependientes para evitar bloqueos por clave foránea.
+    """
+    pres_id = presupuesto.id_presupuesto
+    if hasattr(presupuesto, "orden_trabajo"):
+        ot = presupuesto.orden_trabajo
+        ot.movimientos_financieros.all().delete()
+        ot.cuentas_por_cobrar.all().delete()
+        ot.movimientos_stock.all().delete()
+        ot.turnos.all().delete()
+        ot.delete()
+    presupuesto.delete()
+    return {"detail": f"Presupuesto #{pres_id:04d} eliminado correctamente."}

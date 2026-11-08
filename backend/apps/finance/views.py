@@ -19,7 +19,9 @@ from .serializers import (
     RegistrarMovimientoFinancieroInputSerializer,
 )
 from .services import (
+    actualizar_movimiento_financiero,
     calcular_kpis_dashboard,
+    eliminar_movimiento_financiero,
     emitir_factura_cuenta_por_cobrar,
     registrar_movimiento_financiero,
     sincronizar_estados_mora_cuentas,
@@ -108,9 +110,9 @@ class CuentaPorCobrarViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
-class MovimientoFinancieroViewSet(viewsets.ReadOnlyModelViewSet):
+class MovimientoFinancieroViewSet(viewsets.ModelViewSet):
     """
-    HU-014: Registro y consulta de movimientos financieros (ingresos por cobros y egresos).
+    HU-014: Registro, consulta, edición y eliminación de movimientos financieros (ingresos por cobros y egresos).
     """
 
     queryset = (
@@ -175,6 +177,49 @@ class MovimientoFinancieroViewSet(viewsets.ReadOnlyModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    def update(self, request, *args, **kwargs):
+        return self._handle_update(request)
+
+    def partial_update(self, request, *args, **kwargs):
+        return self._handle_update(request)
+
+    def _handle_update(self, request):
+        movimiento = self.get_object()
+        serializer = RegistrarMovimientoFinancieroInputSerializer(
+            data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        resultado = actualizar_movimiento_financiero(
+            movimiento=movimiento,
+            tipo=data.get("tipo"),
+            categoria=data.get("categoria"),
+            concepto=data.get("concepto"),
+            monto=data.get("monto"),
+            medio_pago=data.get("medio_pago"),
+            fecha=data.get("fecha"),
+        )
+        return Response(
+            {
+                "detail": resultado["detail"],
+                "movimiento": MovimientoFinancieroSerializer(
+                    resultado["movimiento"]
+                ).data,
+                "cuenta": (
+                    CuentaPorCobrarSerializer(resultado["cuenta"]).data
+                    if resultado["cuenta"]
+                    else None
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        movimiento = self.get_object()
+        resultado = eliminar_movimiento_financiero(movimiento=movimiento)
+        return Response(resultado, status=status.HTTP_200_OK)
 
 
 class DashboardKPIsAPIView(APIView):

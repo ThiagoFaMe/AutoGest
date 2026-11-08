@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  deletePresupuesto,
   emitirPresupuesto,
   getPresupuestos,
   rechazarPresupuesto,
@@ -97,16 +98,36 @@ export default function BudgetsPage() {
     }
   };
 
+  const handleDelete = async (p) => {
+    if (
+      !window.confirm(
+        `¿Seguro que querés eliminar el Presupuesto #${String(
+          p.id_presupuesto
+        ).padStart(4, "0")} (${p.vehiculo_patente} - ${p.cliente_nombre})?`
+      )
+    ) {
+      return;
+    }
+    setErrorMsg("");
+    try {
+      const res = await deletePresupuesto(p.id_presupuesto);
+      setFeedback(res.detail);
+      fetchAll();
+    } catch {
+      setErrorMsg("No se pudo eliminar el presupuesto.");
+    }
+  };
+
   return (
     <div>
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-file-earmark-text-fill text-primary me-2"></i>
-            Gestión de Presupuestos y Apertura Automática de OT (Sprint 2)
+            Gestión de Presupuestos y Apertura Automática de OT
           </h4>
           <p className="text-muted small mb-0">
-            Cotizaciones Particulares (HU-005), Siniestros de Aseguradoras (HU-006) y Generación 1:1 de Orden de Trabajo con sus 8 fases (HU-007).
+            Cotizaciones Particulares, Siniestros de Aseguradoras y Generación 1:1 de Orden de Trabajo con sus 8 fases.
           </p>
         </div>
         <button
@@ -234,11 +255,16 @@ export default function BudgetsPage() {
                         #{String(p.id_presupuesto).padStart(4, "0")}
                       </td>
                       <td>
-                        <div className="d-flex align-items-center gap-2">
+                        <div className="d-flex align-items-center gap-2 flex-wrap">
                           <span className="patente-badge small">
                             {p.vehiculo_patente}
                           </span>
                           <span className="fw-semibold">{p.cliente_nombre}</span>
+                          {(!p.id_cliente || !p.id_vehiculo) && (
+                            <span className="badge bg-secondary-subtle text-dark border small">
+                              Sin empadronar aún
+                            </span>
+                          )}
                         </div>
                         <div className="small text-muted">
                           {p.vehiculo_detalle}
@@ -252,8 +278,8 @@ export default function BudgetsPage() {
                               {p.compania_nombre}
                             </span>
                             <div className="small text-muted">
-                              Siniestro: <strong>{p.nro_siniestro}</strong> •
-                              Perito: {p.nombre_perito}
+                              Siniestro: <strong>{p.nro_siniestro || "Sin asignar"}</strong> •
+                              Perito: {p.nombre_perito || "Sin asignar"}
                             </div>
                           </div>
                         ) : (
@@ -320,26 +346,24 @@ export default function BudgetsPage() {
                             <i className="bi bi-printer"></i>
                           </button>
 
-                          {(p.estado === "borrador" ||
-                            p.estado === "emitido") && (
-                            <button
-                              className="btn btn-sm btn-outline-primary"
-                              title="Editar ítems del presupuesto"
-                              onClick={() => {
-                                setEditingBudget(p);
-                                setShowFormModal(true);
-                              }}
-                            >
-                              <i className="bi bi-pencil-square"></i>
-                            </button>
-                          )}
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            title="Editar presupuesto"
+                            onClick={() => {
+                              setEditingBudget(p);
+                              setShowFormModal(true);
+                            }}
+                          >
+                            <i className="bi bi-pencil-square"></i>
+                          </button>
 
-                          {p.estado === "borrador" && (
+                          {(p.estado === "borrador" ||
+                            p.estado === "rechazado") && (
                             <button
                               className="btn btn-sm btn-warning fw-semibold"
                               onClick={() => handleEmitir(p)}
                             >
-                              Emitir
+                              {p.estado === "rechazado" ? "Re-emitir" : "Emitir"}
                             </button>
                           )}
 
@@ -361,6 +385,14 @@ export default function BudgetsPage() {
                               </button>
                             </>
                           )}
+
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            title="Eliminar presupuesto"
+                            onClick={() => handleDelete(p)}
+                          >
+                            <i className="bi bi-trash"></i>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -388,10 +420,12 @@ export default function BudgetsPage() {
         />
       )}
 
-      {/* Modal de Aprobación y Generación Automática de OT (HU-007) */}
+      {/* Modal de Aprobación y Generación Automática de OT */}
       {approvingBudget && (
         <BudgetApproveModal
           budget={approvingBudget}
+          clientes={clientes}
+          vehiculos={vehiculos}
           onClose={() => setApprovingBudget(null)}
           onApproved={(res) => {
             setApprovingBudget(null);
