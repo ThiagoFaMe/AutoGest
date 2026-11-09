@@ -97,13 +97,20 @@ class CuentaPorCobrarViewSet(viewsets.ReadOnlyModelViewSet):
             fecha_emision=data.get("fecha_emision"),
             monto_facturado=data.get("monto_facturado"),
         )
+        if cuenta.compania:
+            detail_msg = (
+                f"Factura {cuenta.nro_factura} emitida. "
+                f"Vencimiento calculado: {cuenta.fecha_vencimiento:%d/%m/%Y} "
+                f"(Plazo: {cuenta.compania.plazo_pago_dias} días)."
+            )
+        else:
+            detail_msg = (
+                f"Factura {cuenta.nro_factura} emitida para cliente particular. "
+                f"Vencimiento en el día: {cuenta.fecha_vencimiento:%d/%m/%Y}."
+            )
         return Response(
             {
-                "detail": (
-                    f"Factura {cuenta.nro_factura} emitida. "
-                    f"Vencimiento calculado: {cuenta.fecha_vencimiento:%d/%m/%Y} "
-                    f"(Plazo: {cuenta.compania.plazo_pago_dias if cuenta.compania else 30} días)."
-                ),
+                "detail": detail_msg,
                 "cuenta": CuentaPorCobrarSerializer(cuenta).data,
             },
             status=status.HTTP_201_CREATED,

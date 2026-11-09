@@ -380,9 +380,11 @@ export default function FinancePage() {
                         </td>
                         <td>
                           <div className="fw-semibold">{c.compania_nombre}</div>
-                          <small className="text-muted">
-                            Plazo pactado: {c.plazo_pago_dias} días
-                          </small>
+                          {c.id_compania && c.plazo_pago_dias != null && (
+                            <small className="text-muted">
+                              Plazo pactado: {c.plazo_pago_dias} días
+                            </small>
+                          )}
                         </td>
                         <td className="small">
                           {formatDateShort(c.fecha_emision)}

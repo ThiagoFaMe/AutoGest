@@ -27,7 +27,13 @@ def sincronizar_estados_mora_cuentas() -> int:
     HU-013 Criterio 2:
     Revisa todas las cuentas con saldo_pendiente > 0 cuya fecha_vencimiento sea anterior
     a hoy (Fecha Actual > Fecha de Vencimiento) y actualiza su estado a 'vencida_en_mora'.
+    Además, asegura que en clientes particulares (sin aseguradora) el vencimiento coincida
+    con la fecha de emisión (sin plazo diferido).
     """
+    CuentaPorCobrar.objects.filter(compania__isnull=True).exclude(
+        fecha_vencimiento=F("fecha_emision")
+    ).update(fecha_vencimiento=F("fecha_emision"))
+
     hoy = date.today()
     actualizadas = (
         CuentaPorCobrar.objects.filter(
@@ -79,11 +85,12 @@ def emitir_factura_cuenta_por_cobrar(
             {"monto_facturado": "El monto facturado debe ser mayor a cero."}
         )
 
-    plazo_dias = 30
     if orden.compania and orden.compania.plazo_pago_dias:
         plazo_dias = int(orden.compania.plazo_pago_dias)
-
-    fecha_venc = fecha_emi + timedelta(days=plazo_dias)
+        fecha_venc = fecha_emi + timedelta(days=plazo_dias)
+    else:
+        # Para clientes particulares el pago es en el día de retiro/emisión (sin plazo diferido)
+        fecha_venc = fecha_emi
 
     estado_inicial = CuentaPorCobrar.EstadoCobranza.PENDIENTE_EN_PLAZO
     if date.today() > fecha_venc:

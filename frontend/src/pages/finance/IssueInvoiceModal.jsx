@@ -125,8 +125,9 @@ export default function IssueInvoiceModal({ onClose, onSuccess }) {
                     </strong>
                   </div>
                   <div className="text-muted">
-                    El vencimiento se calculará automáticamente sumando el plazo
-                    configurado de la aseguradora.
+                    {selectedOrden.aseguradora_nombre
+                      ? "El vencimiento se calculará automáticamente sumando el plazo configurado de la aseguradora."
+                      : "Cliente particular: sin plazo diferido. El vencimiento será el mismo día de la emisión."}
                   </div>
                 </div>
               )}
@@ -191,7 +192,9 @@ export default function IssueInvoiceModal({ onClose, onSuccess }) {
               >
                 {loading
                   ? "Generando..."
-                  : "Emitir Factura y Calcular Vencimiento"}
+                  : selectedOrden?.aseguradora_nombre
+                  ? "Emitir Factura y Calcular Vencimiento"
+                  : "Emitir Factura"}
               </button>
             </div>
           </form>

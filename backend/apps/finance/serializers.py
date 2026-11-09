@@ -64,7 +64,7 @@ class CuentaPorCobrarSerializer(serializers.ModelSerializer):
         return obj.compania.razon_social if obj.compania else "Cliente Particular"
 
     def get_plazo_pago_dias(self, obj):
-        return obj.compania.plazo_pago_dias if obj.compania else 30
+        return obj.compania.plazo_pago_dias if obj.compania else None
 
 
 class EmitirFacturaInputSerializer(serializers.Serializer):
