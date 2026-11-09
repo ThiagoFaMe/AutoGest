@@ -17,6 +17,22 @@ from .models import ItemPresupuesto, Presupuesto
 VALIDEZ_PRESUPUESTO_DIAS = 15
 
 
+def sincronizar_presupuestos_vencidos() -> int:
+    """
+    Si un presupuesto tiene fecha_vencimiento anterior al día de hoy y no fue aprobado,
+    pasa automáticamente a estado 'rechazado' (cancelado por vencimiento sin borrarse).
+    """
+    hoy = date.today()
+    return Presupuesto.objects.filter(
+        fecha_vencimiento__lt=hoy,
+        estado__in=[
+            Presupuesto.Estado.BORRADOR,
+            Presupuesto.Estado.EMITIDO,
+            Presupuesto.Estado.VENCIDO,
+        ],
+    ).update(estado=Presupuesto.Estado.RECHAZADO)
+
+
 def _to_decimal(val) -> Decimal:
     try:
         if val in (None, ""):
@@ -252,10 +268,14 @@ def emitir_presupuesto(presupuesto: Presupuesto) -> Presupuesto:
     if presupuesto.estado == Presupuesto.Estado.APROBADO:
         return presupuesto
 
-    hoy = date.today()
-    presupuesto.estado = Presupuesto.Estado.EMITIDO
-    presupuesto.fecha_emision = hoy
-    presupuesto.fecha_vencimiento = hoy + timedelta(days=VALIDEZ_PRESUPUESTO_DIAS)
+    fecha_base = presupuesto.fecha_emision or date.today()
+    fecha_venc = fecha_base + timedelta(days=VALIDEZ_PRESUPUESTO_DIAS)
+    presupuesto.fecha_emision = fecha_base
+    presupuesto.fecha_vencimiento = fecha_venc
+    if fecha_venc < date.today():
+        presupuesto.estado = Presupuesto.Estado.RECHAZADO
+    else:
+        presupuesto.estado = Presupuesto.Estado.EMITIDO
     presupuesto.save(update_fields=["estado", "fecha_emision", "fecha_vencimiento"])
     return presupuesto
 

@@ -189,19 +189,7 @@ class Sprint4InventarioConsumosTests(TestCase):
 
         self.client.force_authenticate(user=self.operario)
 
-        # 1. Intento de consumo sin Orden de Trabajo -> bloqueado (HTTP 400)
-        res_sin_ot = self.client.post(
-            "/api/inventory/movimientos/registrar-consumo/",
-            {
-                "id_insumo": insumo.id_insumo,
-                "id_orden": None,
-                "cantidad": "1.00",
-            },
-            format="json",
-        )
-        self.assertEqual(res_sin_ot.status_code, status.HTTP_400_BAD_REQUEST)
-
-        # 2. Intento de consumo superando stock disponible (6.00 > 4.00) -> bloqueado (HTTP 400)
+        # 1. Intento de consumo superando stock disponible (6.00 > 4.00) -> bloqueado (HTTP 400)
         res_exceso = self.client.post(
             "/api/inventory/movimientos/registrar-consumo/",
             {
@@ -214,21 +202,33 @@ class Sprint4InventarioConsumosTests(TestCase):
         self.assertEqual(res_exceso.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Stock insuficiente", str(res_exceso.data))
 
-        # 3. Consumo válido de 2.50 kg -> deja stock en 1.50 kg (<= 2.00 -> dispara alerta)
-        #    y acumula 2.50 * 15000 = $37,500.00 en la Orden de Trabajo.
+        # 2. Consumo general sin Orden de Trabajo (ej. cinta o lija) de 0.50 kg -> deja stock en 3.50 kg
+        res_sin_ot = self.client.post(
+            "/api/inventory/movimientos/registrar-consumo/",
+            {
+                "id_insumo": insumo.id_insumo,
+                "id_orden": None,
+                "cantidad": "0.50",
+            },
+            format="json",
+        )
+        self.assertEqual(res_sin_ot.status_code, status.HTTP_201_CREATED)
+
+        # 3. Consumo válido en OT de 2.00 kg -> deja stock en 1.50 kg (<= 2.00 -> dispara alerta)
+        #    y acumula 2.00 * 15000 = $30,000.00 en la Orden de Trabajo.
         res_ok = self.client.post(
             "/api/inventory/movimientos/registrar-consumo/",
             {
                 "id_insumo": insumo.id_insumo,
                 "id_orden": self.orden.id_orden,
-                "cantidad": "2.50",
+                "cantidad": "2.00",
                 "observacion_comprobante": "Masillado guardabarros trasero",
             },
             format="json",
         )
         self.assertEqual(res_ok.status_code, status.HTTP_201_CREATED)
         self.assertTrue(res_ok.data["alerta_stock_minimo"])
-        self.assertEqual(res_ok.data["costo_acumulado_ot"], "37500.00")
+        self.assertEqual(res_ok.data["costo_acumulado_ot"], "30000.00")
 
         insumo.refresh_from_db()
         self.assertEqual(insumo.stock_actual, Decimal("1.50"))

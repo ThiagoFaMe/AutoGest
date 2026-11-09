@@ -96,7 +96,7 @@ export default function InsurersPage() {
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-shield-check text-primary me-2"></i>
-            Compañías Aseguradoras y Plazos de Liquidación (HU-004)
+            Compañías Aseguradoras y Plazos de Liquidación
           </h4>
           <p className="text-muted small mb-0">
             Parametrización de CUIT, contacto de peritos y plazo contractual (30, 45 o 60 días) para cálculo automático de vencimientos.

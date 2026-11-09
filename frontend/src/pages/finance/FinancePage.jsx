@@ -344,7 +344,7 @@ export default function FinancePage() {
                     <th className="text-end">Facturado</th>
                     <th className="text-end">Cobrado</th>
                     <th className="text-end">Saldo Pendiente</th>
-                    <th>Estado y Mora (HU-013)</th>
+                    <th>Estado y Mora</th>
                     <th className="text-end">Acción</th>
                   </tr>
                 </thead>

@@ -14,6 +14,7 @@ from .services import (
     eliminar_presupuesto,
     emitir_presupuesto,
     rechazar_presupuesto,
+    sincronizar_presupuestos_vencidos,
 )
 
 
@@ -33,6 +34,7 @@ class PresupuestoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdministrativoOrAdmin]
 
     def get_queryset(self):
+        sincronizar_presupuestos_vencidos()
         qs = super().get_queryset()
         tipo = (self.request.query_params.get("tipo") or "").strip()
         estado = (self.request.query_params.get("estado") or "").strip()
@@ -62,12 +64,19 @@ class PresupuestoViewSet(viewsets.ModelViewSet):
         """
         presupuesto = self.get_object()
         presupuesto = emitir_presupuesto(presupuesto)
+        if presupuesto.estado == Presupuesto.Estado.RECHAZADO:
+            msg = (
+                f"Presupuesto #{presupuesto.id_presupuesto} registrado con vencimiento "
+                f"{presupuesto.fecha_vencimiento} (plazo cumplido: marcado como rechazado)."
+            )
+        else:
+            msg = (
+                f"Presupuesto #{presupuesto.id_presupuesto} emitido formalmente. "
+                f"Válido hasta {presupuesto.fecha_vencimiento}."
+            )
         return Response(
             {
-                "detail": (
-                    f"Presupuesto #{presupuesto.id_presupuesto} emitido formalmente. "
-                    f"Válido hasta {presupuesto.fecha_vencimiento}."
-                ),
+                "detail": msg,
                 "presupuesto": PresupuestoSerializer(presupuesto).data,
             },
             status=status.HTTP_200_OK,

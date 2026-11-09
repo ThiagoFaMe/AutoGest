@@ -123,7 +123,7 @@ export default function VehiclesPage() {
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-truck-front-fill text-primary me-2"></i>
-            Padrón de Vehículos y Código Colorimétrico (HU-003)
+            Padrón de Vehículos y Código Colorimétrico
           </h4>
           <p className="text-muted small mb-0">
             Control de unicidad por dominio (Mercosur AA123BB / Tradicional ABC123) y trazabilidad por unidad.
@@ -264,7 +264,7 @@ export default function VehiclesPage() {
                     <div className="alert alert-warning border border-warning small">
                       <div className="fw-bold mb-1">
                         <i className="bi bi-car-front-fill me-1"></i>
-                        Vehículo Existente en el Padrón (HU-003 Criterio 1):
+                        Vehículo Existente en el Padrón:
                       </div>
                       <div>
                         <strong>Unidad:</strong> {existingVehicle.patente} —{" "}

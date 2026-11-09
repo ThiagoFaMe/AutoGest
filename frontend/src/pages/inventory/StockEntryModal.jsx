@@ -68,7 +68,7 @@ export default function StockEntryModal({
           <div className="modal-header bg-success text-white">
             <h5 className="modal-title fw-bold">
               <i className="bi bi-box-arrow-in-down me-2"></i>
-              Ingreso de Stock por Compra / Remito (HU-011)
+              Ingreso de Stock por Compra / Remito
             </h5>
             <button
               type="button"

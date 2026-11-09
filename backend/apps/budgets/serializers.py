@@ -6,6 +6,7 @@ Incluye soporte completo para:
 - Emisión de presupuestos sin exigir empadronamiento previo de Cliente/Vehículo (se registran al aprobar el presupuesto).
 """
 import re
+from datetime import date, timedelta
 from django.db import transaction
 from rest_framework import serializers
 
@@ -110,7 +111,6 @@ class PresupuestoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id_presupuesto",
-            "fecha_emision",
             "fecha_vencimiento",
             "estado",
             "monto_mano_obra",
@@ -239,6 +239,11 @@ class PresupuestoSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop("items", None)
+        if validated_data.get("fecha_emision"):
+            venc = validated_data["fecha_emision"] + timedelta(days=15)
+            validated_data["fecha_vencimiento"] = venc
+            if venc < date.today():
+                validated_data["estado"] = Presupuesto.Estado.RECHAZADO
         presupuesto = Presupuesto.objects.create(**validated_data)
         if items_data is not None and len(items_data) > 0:
             sync_budget_items(presupuesto, items_data)
@@ -250,6 +255,12 @@ class PresupuestoSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         items_data = validated_data.pop("items", None)
+        if "fecha_emision" in validated_data and validated_data["fecha_emision"]:
+            venc = validated_data["fecha_emision"] + timedelta(days=15)
+            validated_data["fecha_vencimiento"] = venc
+            if instance.estado != Presupuesto.Estado.APROBADO:
+                if venc < date.today():
+                    validated_data["estado"] = Presupuesto.Estado.RECHAZADO
         for attr, val in validated_data.items():
             setattr(instance, attr, val)
         instance.save()

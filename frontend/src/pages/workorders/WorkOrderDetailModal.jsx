@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { getInsumos, getMovimientosStock } from "../../api/inventoryApi";
 import {
   completarFaseReparacion,
+  editarFaseReparacion,
+  editarFechasOrden,
   getOrdenTrabajoById,
   iniciarFaseReparacion,
   registrarEntregaVehiculo,
@@ -28,6 +30,17 @@ const formatDateShort = (dateStr) => {
   return dateStr;
 };
 
+// Convierte un ISO string a formato YYYY-MM-DDTHH:mm local para <input type="datetime-local">
+const toDatetimeLocalInput = (isoString) => {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+    d.getDate()
+  )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
   const { user } = useAuth();
   const [observacion, setObservacion] = useState("");
@@ -37,6 +50,23 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
   const [insumosCatalogo, setInsumosCatalogo] = useState([]);
   const [showConsumeModal, setShowConsumeModal] = useState(false);
 
+  // Estado para edición manual de tiempos/fechas de una fase
+  const [editingFaseSeq, setEditingFaseSeq] = useState(null);
+  const [faseForm, setFaseForm] = useState({
+    estado: "completada",
+    fecha_inicio: "",
+    fecha_fin: "",
+    observaciones: "",
+  });
+
+  // Estado para edición de fechas generales de la Orden (Ingreso / Promesa / Entrega Real)
+  const [editingOrderDates, setEditingOrderDates] = useState(false);
+  const [orderDatesForm, setOrderDatesForm] = useState({
+    fecha_ingreso: "",
+    fecha_estimada_entrega: "",
+    fecha_entrega_real: "",
+  });
+
   const loadConsumosOT = async () => {
     if (!orden?.id_orden) return;
     try {
@@ -45,7 +75,9 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
         getInsumos(),
       ]);
       setConsumosOT(Array.isArray(movData) ? movData : movData.results || []);
-      setInsumosCatalogo(Array.isArray(insData) ? insData : insData.results || []);
+      setInsumosCatalogo(
+        Array.isArray(insData) ? insData : insData.results || []
+      );
     } catch (err) {
       console.error("Error cargando consumos de la OT:", err);
     }
@@ -62,6 +94,78 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
   const primeraPendiente = fases.find((f) => f.estado === "pendiente");
   const todasCompletadas =
     fases.length > 0 && fases.every((f) => f.estado === "completada");
+
+  const handleOpenEditFase = (fase) => {
+    setEditingFaseSeq(fase.numero_secuencia);
+    setFaseForm({
+      estado: fase.estado || "completada",
+      fecha_inicio: toDatetimeLocalInput(fase.fecha_inicio),
+      fecha_fin: toDatetimeLocalInput(fase.fecha_fin),
+      observaciones: fase.observaciones || "",
+    });
+  };
+
+  const handleSaveEditFase = async (numeroSecuencia) => {
+    setFeedback(null);
+    setLoadingFaseId(numeroSecuencia);
+    try {
+      const payload = {
+        numero_secuencia: numeroSecuencia,
+        estado: faseForm.estado,
+        fecha_inicio: faseForm.fecha_inicio
+          ? new Date(faseForm.fecha_inicio).toISOString()
+          : null,
+        fecha_fin: faseForm.fecha_fin
+          ? new Date(faseForm.fecha_fin).toISOString()
+          : null,
+        observaciones: faseForm.observaciones,
+      };
+      const resp = await editarFaseReparacion(orden.id_orden, payload);
+      setEditingFaseSeq(null);
+      setFeedback({ type: "success", text: resp.detail });
+      if (onUpdated) onUpdated(resp.orden);
+    } catch (err) {
+      const data = err.response?.data;
+      const msg =
+        data?.detail ||
+        (Array.isArray(data) ? data.join(" ") : null) ||
+        "No se pudieron guardar los tiempos de la fase. Verifique que la fecha de fin sea posterior a la de inicio.";
+      setFeedback({ type: "danger", text: msg });
+    } finally {
+      setLoadingFaseId(null);
+    }
+  };
+
+  const handleOpenEditOrderDates = () => {
+    setOrderDatesForm({
+      fecha_ingreso: orden.fecha_ingreso || "",
+      fecha_estimada_entrega: orden.fecha_estimada_entrega || "",
+      fecha_entrega_real: orden.fecha_entrega_real || "",
+    });
+    setEditingOrderDates(true);
+  };
+
+  const handleSaveOrderDates = async (e) => {
+    e.preventDefault();
+    setFeedback(null);
+    try {
+      const resp = await editarFechasOrden(orden.id_orden, {
+        fecha_ingreso: orderDatesForm.fecha_ingreso,
+        fecha_estimada_entrega: orderDatesForm.fecha_estimada_entrega,
+        fecha_entrega_real: orderDatesForm.fecha_entrega_real || null,
+      });
+      setEditingOrderDates(false);
+      setFeedback({ type: "success", text: resp.detail });
+      if (onUpdated) onUpdated(resp.orden);
+    } catch (err) {
+      const data = err.response?.data;
+      const msg =
+        data?.detail ||
+        (Array.isArray(data) ? data.join(" ") : null) ||
+        "No se pudieron actualizar las fechas de la orden.";
+      setFeedback({ type: "danger", text: msg });
+    }
+  };
 
   const handleIniciarFase = async (numeroSecuencia, nombreFase) => {
     setFeedback(null);
@@ -121,7 +225,8 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
       if (onUpdated) onUpdated(resp.orden);
     } catch (err) {
       const msg =
-        err.response?.data?.detail || "No se pudo registrar la entrega del vehículo.";
+        err.response?.data?.detail ||
+        "No se pudo registrar la entrega del vehículo.";
       setFeedback({ type: "danger", text: msg });
     } finally {
       setLoadingFaseId(null);
@@ -138,7 +243,7 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
     >
       <div className="modal-dialog modal-xl modal-dialog-scrollable">
         <div className="modal-content border-0 shadow-lg">
-          {/* Encabezado Prototipo 2 */}
+          {/* Encabezado */}
           <div className="modal-header bg-dark text-white py-3">
             <div>
               <div className="d-flex align-items-center gap-2">
@@ -157,12 +262,16 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                 )}
               </div>
               <div className="small text-secondary mt-1">
-                Titular: <strong className="text-light">{orden.cliente_nombre}</strong> (DNI{" "}
-                {orden.cliente_dni}) • Tel: {orden.cliente_telefono} • Tipo:{" "}
+                Titular:{" "}
+                <strong className="text-light">{orden.cliente_nombre}</strong>{" "}
+                (DNI {orden.cliente_dni}) • Tel: {orden.cliente_telefono} •
+                Tipo:{" "}
                 <span className="text-uppercase fw-semibold text-info">
                   {orden.presupuesto_tipo}
                 </span>
-                {orden.aseguradora_nombre ? ` (${orden.aseguradora_nombre})` : ""}
+                {orden.aseguradora_nombre
+                  ? ` (${orden.aseguradora_nombre})`
+                  : ""}
               </div>
             </div>
             <button
@@ -173,7 +282,7 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
           </div>
 
           <div className="modal-body p-4 bg-light">
-            {/* Banner de Retroalimentación (Éxito o Bloqueo de Secuencia HU-008) */}
+            {/* Banner de Retroalimentación */}
             {feedback && (
               <div
                 className={`alert alert-${feedback.type} d-flex align-items-center justify-content-between shadow-sm`}
@@ -196,12 +305,14 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
               </div>
             )}
 
-            {/* Tarjetas de Resumen Temporal (HU-009) */}
+            {/* Tarjetas de Resumen Temporal */}
             <div className="row g-3 mb-4">
               <div className="col-md-3">
                 <div className="card border-0 shadow-sm h-100">
                   <div className="card-body py-2 px-3">
-                    <div className="text-muted small">Estado Operativo Actual</div>
+                    <div className="text-muted small">
+                      Estado Operativo Actual
+                    </div>
                     <div className="fw-bold text-primary fs-6">
                       {orden.estado_actual}
                     </div>
@@ -216,8 +327,8 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                       ></div>
                     </div>
                     <small className="text-muted">
-                      {orden.fases_completadas} de {orden.total_fases} etapas de taller (
-                      {orden.progreso_porcentaje}%)
+                      {orden.fases_completadas} de {orden.total_fases} etapas de
+                      taller ({orden.progreso_porcentaje}%)
                     </small>
                   </div>
                 </div>
@@ -226,7 +337,21 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
               <div className="col-md-3">
                 <div className="card border-0 shadow-sm h-100">
                   <div className="card-body py-2 px-3">
-                    <div className="text-muted small">Ingreso / Promesa Entrega</div>
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span className="text-muted small">
+                        Ingreso / Promesa Entrega
+                      </span>
+                      {canRegisterDelivery && !editingOrderDates && (
+                        <button
+                          type="button"
+                          className="btn btn-link btn-sm p-0 text-decoration-none"
+                          onClick={handleOpenEditOrderDates}
+                          title="Editar fecha de ingreso, promesa o entrega"
+                        >
+                          <i className="bi bi-pencil-square"></i> Editar
+                        </button>
+                      )}
+                    </div>
                     <div className="fw-semibold">
                       Ing: {formatDateShort(orden.fecha_ingreso)}
                     </div>
@@ -250,7 +375,9 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                     </div>
                     <small className="text-muted">
                       {orden.fecha_entrega_real
-                        ? `Entregado el ${formatDateShort(orden.fecha_entrega_real)}`
+                        ? `Entregado el ${formatDateShort(
+                            orden.fecha_entrega_real
+                          )}`
                         : "Ciclo abierto en planta"}
                     </small>
                   </div>
@@ -260,7 +387,9 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
               <div className="col-md-3">
                 <div className="card border-0 shadow-sm h-100">
                   <div className="card-body py-2 px-3">
-                    <div className="text-muted small">Acción Rápida / Entrega</div>
+                    <div className="text-muted small">
+                      Acción Rápida / Entrega
+                    </div>
                     {todasCompletadas && !orden.fecha_entrega_real ? (
                       canRegisterDelivery ? (
                         <button
@@ -280,18 +409,114 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                         </span>
                       )
                     ) : orden.fecha_entrega_real ? (
-                      <span className="badge bg-dark mt-1">
-                        <i className="bi bi-check2-all me-1"></i> Vehículo Entregado
-                      </span>
+                      <div className="d-flex flex-column gap-1 mt-1">
+                        <span className="badge bg-dark">
+                          <i className="bi bi-check2-all me-1"></i> Entregado el{" "}
+                          {formatDateShort(orden.fecha_entrega_real)}
+                        </span>
+                        {canRegisterDelivery && (
+                          <button
+                            type="button"
+                            className="btn btn-outline-primary btn-sm py-0 fw-semibold"
+                            onClick={handleOpenEditOrderDates}
+                          >
+                            <i className="bi bi-calendar-event me-1"></i>
+                            Cambiar Fecha de Entrega
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <div className="small text-secondary mt-1">
-                        Complete las 8 fases de taller para habilitar la entrega.
+                        Complete las 8 fases de taller para habilitar la
+                        entrega.
                       </div>
                     )}
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Formulario desplegable si se edita la fecha de ingreso / promesa / entrega de la Orden */}
+            {editingOrderDates && (
+              <form
+                onSubmit={handleSaveOrderDates}
+                className="card border-primary shadow-sm mb-4"
+              >
+                <div className="card-body py-3">
+                  <h6 className="fw-bold text-primary mb-2">
+                    <i className="bi bi-calendar-range me-2"></i>
+                    Editar Fechas Generales de la Orden {orden.codigo_seguimiento}
+                  </h6>
+                  <div className="row g-2 align-items-end">
+                    <div className="col-md-3">
+                      <label className="form-label small fw-semibold mb-1">
+                        Fecha de Ingreso
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={orderDatesForm.fecha_ingreso}
+                        onChange={(e) =>
+                          setOrderDatesForm({
+                            ...orderDatesForm,
+                            fecha_ingreso: e.target.value,
+                          })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label small fw-semibold mb-1">
+                        Fecha Promesa de Entrega
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={orderDatesForm.fecha_estimada_entrega}
+                        onChange={(e) =>
+                          setOrderDatesForm({
+                            ...orderDatesForm,
+                            fecha_estimada_entrega: e.target.value,
+                          })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label small fw-semibold mb-1">
+                        Fecha Entrega Real (Vacío = En planta)
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={orderDatesForm.fecha_entrega_real}
+                        onChange={(e) =>
+                          setOrderDatesForm({
+                            ...orderDatesForm,
+                            fecha_entrega_real: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="col-md-3 d-flex gap-2">
+                      <button
+                        type="submit"
+                        className="btn btn-sm btn-primary fw-semibold flex-grow-1"
+                      >
+                        Guardar Fechas
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => setEditingOrderDates(false)}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            )}
 
             {/* Panel de Acción Táctil para la Fase Activa (Tablet de Taller) */}
             {!orden.fecha_entrega_real && (faseEnCurso || primeraPendiente) && (
@@ -300,10 +525,11 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                   <div className="flex-grow-1">
                     <div className="d-flex align-items-center gap-2 mb-1">
                       <span className="badge bg-primary">
-                        PANEL TÁCTIL DE OPERARIO (HU-008)
+                        PANEL RÁPIDO DE TALLER
                       </span>
                       <span className="text-muted small">
-                        Responsable que certifica: <strong>{user?.nombre_completo}</strong>
+                        Responsable que certifica:{" "}
+                        <strong>{user?.nombre_completo}</strong>
                       </span>
                     </div>
                     <h6 className="fw-bold mb-2">
@@ -342,7 +568,9 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                       <button
                         type="button"
                         className="btn btn-primary px-4 py-2 fw-bold shadow-sm"
-                        disabled={loadingFaseId === primeraPendiente.numero_secuencia}
+                        disabled={
+                          loadingFaseId === primeraPendiente.numero_secuencia
+                        }
                         onClick={() =>
                           handleIniciarFase(
                             primeraPendiente.numero_secuencia,
@@ -361,14 +589,20 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
               </div>
             )}
 
-            {/* Línea de Tiempo Secuencial de 10 Etapas (2 Administrativas + 8 de Taller) */}
-            <h6 className="fw-bold text-uppercase text-secondary small mb-3">
-              <i className="bi bi-diagram-3-fill me-1"></i>
-              Línea de Tiempo Secuencial del Ciclo de Reparación (Prototipo 2 — 10 Fases)
-            </h6>
+            {/* Línea de Tiempo Secuencial de las Etapas */}
+            <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <h6 className="fw-bold text-uppercase text-secondary small mb-0">
+                <i className="bi bi-diagram-3-fill me-1"></i>
+                Línea de Tiempo Secuencial del Ciclo de Reparación
+              </h6>
+              <span className="small text-muted">
+                <i className="bi bi-info-circle me-1"></i>
+                Podés usar el botón <strong>Editar Tiempos</strong> en cada fase para ajustar cuándo ingresó y salió el vehículo de esa etapa.
+              </span>
+            </div>
 
             <div className="d-flex flex-column gap-2">
-              {/* Etapas Administrativas Previas (Certificadas en Sprint 2) */}
+              {/* Etapas Administrativas Previas */}
               <div className="card border-0 shadow-sm bg-white border-start border-success border-4">
                 <div className="card-body py-2 px-3 d-flex justify-content-between align-items-center">
                   <div className="d-flex align-items-center gap-3">
@@ -396,6 +630,7 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
               {fases.map((fase) => {
                 const isCompleted = fase.estado === "completada";
                 const isActive = fase.estado === "en_curso";
+                const isEditingThis = editingFaseSeq === fase.numero_secuencia;
                 const borderClass = isCompleted
                   ? "border-start border-success border-4"
                   : isActive
@@ -407,126 +642,249 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                     key={fase.id_fase}
                     className={`card border-0 shadow-sm ${borderClass}`}
                   >
-                    <div className="card-body py-3 px-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-                      <div className="d-flex align-items-start gap-3">
-                        <div
-                          className={`rounded-circle d-flex align-items-center justify-content-center fw-bold text-white flex-shrink-0 ${
-                            isCompleted
-                              ? "bg-success"
-                              : isActive
-                              ? "bg-primary"
-                              : "bg-secondary"
-                          }`}
-                          style={{ width: "36px", height: "36px" }}
-                        >
-                          {isCompleted ? (
-                            <i className="bi bi-check-lg"></i>
-                          ) : (
-                            fase.orden_secuencia
-                          )}
-                        </div>
-
-                        <div>
-                          <div className="d-flex align-items-center gap-2">
-                            <span className="fw-bold fs-6">
-                              Fase {fase.orden_secuencia}: {fase.nombre_fase}
-                            </span>
-                            {isCompleted && (
-                              <span className="badge bg-success">Completada</span>
+                    <div className="card-body py-3 px-3">
+                      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                        <div className="d-flex align-items-start gap-3">
+                          <div
+                            className={`rounded-circle d-flex align-items-center justify-content-center fw-bold text-white flex-shrink-0 ${
+                              isCompleted
+                                ? "bg-success"
+                                : isActive
+                                ? "bg-primary"
+                                : "bg-secondary"
+                            }`}
+                            style={{ width: "36px", height: "36px" }}
+                          >
+                            {isCompleted ? (
+                              <i className="bi bi-check-lg"></i>
+                            ) : (
+                              fase.orden_secuencia
                             )}
-                            {isActive && (
-                              <span className="badge bg-primary">
-                                <i className="bi bi-gear-wide-connected me-1"></i>
-                                En Curso
+                          </div>
+
+                          <div>
+                            <div className="d-flex align-items-center gap-2">
+                              <span className="fw-bold fs-6">
+                                Fase {fase.orden_secuencia}: {fase.nombre_fase}
                               </span>
-                            )}
-                            {!isCompleted && !isActive && (
-                              <span className="badge bg-secondary">Pendiente</span>
-                            )}
-                          </div>
-
-                          <div className="small text-muted mt-1 d-flex flex-wrap gap-3">
-                            <span>
-                              <i className="bi bi-clock me-1"></i>
-                              <strong>Inicio:</strong> {formatDateTime(fase.fecha_inicio)}
-                            </span>
-                            <span>
-                              <i className="bi bi-flag me-1"></i>
-                              <strong>Fin:</strong> {formatDateTime(fase.fecha_fin)}
-                            </span>
-                            <span>
-                              <i className="bi bi-person-badge me-1"></i>
-                              <strong>Responsable:</strong>{" "}
-                              {fase.responsable_nombre || "Sin asignar"}
-                            </span>
-                          </div>
-
-                          {fase.observaciones && (
-                            <div className="small text-dark bg-light border rounded px-2 py-1 mt-2">
-                              <i className="bi bi-chat-left-text me-1 text-primary"></i>
-                              {fase.observaciones}
+                              {isCompleted && (
+                                <span className="badge bg-success">
+                                  Completada
+                                </span>
+                              )}
+                              {isActive && (
+                                <span className="badge bg-primary">
+                                  <i className="bi bi-gear-wide-connected me-1"></i>
+                                  En Curso
+                                </span>
+                              )}
+                              {!isCompleted && !isActive && (
+                                <span className="badge bg-secondary">
+                                  Pendiente
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </div>
 
-                      {/* Métrica de Duración (HU-009) + Acciones por fila */}
-                      <div className="d-flex align-items-center gap-2 align-self-end align-self-md-center">
-                        <div className="text-end me-2">
-                          <div className="small text-muted">Tiempo en etapa</div>
-                          <div className="fw-bold text-dark">
-                            {fase.duracion_texto}
+                            <div className="small text-muted mt-1 d-flex flex-wrap gap-3">
+                              <span>
+                                <i className="bi bi-clock me-1"></i>
+                                <strong>Inicio:</strong>{" "}
+                                {formatDateTime(fase.fecha_inicio)}
+                              </span>
+                              <span>
+                                <i className="bi bi-flag me-1"></i>
+                                <strong>Fin:</strong>{" "}
+                                {formatDateTime(fase.fecha_fin)}
+                              </span>
+                              <span>
+                                <i className="bi bi-person-badge me-1"></i>
+                                <strong>Responsable:</strong>{" "}
+                                {fase.responsable_nombre || "Sin asignar"}
+                              </span>
+                            </div>
+
+                            {fase.observaciones && (
+                              <div className="small text-dark bg-light border rounded px-2 py-1 mt-2">
+                                <i className="bi bi-chat-left-text me-1 text-primary"></i>
+                                {fase.observaciones}
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {!orden.fecha_entrega_real && isActive && (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-success fw-semibold"
-                            disabled={loadingFaseId === fase.numero_secuencia}
-                            onClick={() =>
-                              handleCompletarFase(
-                                fase.numero_secuencia,
-                                fase.nombre_fase
-                              )
-                            }
-                          >
-                            <i className="bi bi-check2 me-1"></i>
-                            Completar
-                          </button>
-                        )}
+                        {/* Métrica de Duración + Acciones por fila */}
+                        <div className="d-flex align-items-center gap-2 align-self-end align-self-md-center">
+                          <div className="text-end me-2">
+                            <div className="small text-muted">
+                              Tiempo en etapa
+                            </div>
+                            <div className="fw-bold text-dark">
+                              {fase.duracion_texto}
+                            </div>
+                          </div>
 
-                        {!orden.fecha_entrega_real && !isCompleted && !isActive && (
                           <button
                             type="button"
-                            className="btn btn-sm btn-outline-secondary"
-                            disabled={loadingFaseId === fase.numero_secuencia}
-                            title="Permite iniciar la fase (o verificar bloqueo de secuencia HU-008 si hay previas sin cerrar)"
+                            className="btn btn-sm btn-outline-primary"
+                            title="Editar fecha/hora de inicio y fin de esta fase"
                             onClick={() =>
-                              handleIniciarFase(
-                                fase.numero_secuencia,
-                                fase.nombre_fase
-                              )
+                              isEditingThis
+                                ? setEditingFaseSeq(null)
+                                : handleOpenEditFase(fase)
                             }
                           >
-                            <i className="bi bi-play me-1"></i>
-                            Iniciar
+                            <i className="bi bi-pencil-square me-1"></i>
+                            Editar Tiempos
                           </button>
-                        )}
+
+                          {!orden.fecha_entrega_real && isActive && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-success fw-semibold"
+                              disabled={loadingFaseId === fase.numero_secuencia}
+                              onClick={() =>
+                                handleCompletarFase(
+                                  fase.numero_secuencia,
+                                  fase.nombre_fase
+                                )
+                              }
+                            >
+                              <i className="bi bi-check2 me-1"></i>
+                              Completar
+                            </button>
+                          )}
+
+                          {!orden.fecha_entrega_real &&
+                            !isCompleted &&
+                            !isActive && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-secondary"
+                                disabled={
+                                  loadingFaseId === fase.numero_secuencia
+                                }
+                                onClick={() =>
+                                  handleIniciarFase(
+                                    fase.numero_secuencia,
+                                    fase.nombre_fase
+                                  )
+                                }
+                              >
+                                <i className="bi bi-play me-1"></i>
+                                Iniciar
+                              </button>
+                            )}
+                        </div>
                       </div>
+
+                      {/* Panel desplegable para editar Inicio, Fin, Estado y Observación de la Fase */}
+                      {isEditingThis && (
+                        <div className="mt-3 pt-3 border-top bg-light p-3 rounded">
+                          <div className="row g-2 align-items-end">
+                            <div className="col-md-3">
+                              <label className="form-label small fw-semibold mb-1">
+                                Entrada a la Fase (Inicio)
+                              </label>
+                              <input
+                                type="datetime-local"
+                                className="form-control form-control-sm"
+                                value={faseForm.fecha_inicio}
+                                onChange={(e) =>
+                                  setFaseForm({
+                                    ...faseForm,
+                                    fecha_inicio: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="col-md-3">
+                              <label className="form-label small fw-semibold mb-1">
+                                Salida de la Fase (Fin)
+                              </label>
+                              <input
+                                type="datetime-local"
+                                className="form-control form-control-sm"
+                                value={faseForm.fecha_fin}
+                                onChange={(e) =>
+                                  setFaseForm({
+                                    ...faseForm,
+                                    fecha_fin: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="col-md-2">
+                              <label className="form-label small fw-semibold mb-1">
+                                Estado
+                              </label>
+                              <select
+                                className="form-select form-select-sm"
+                                value={faseForm.estado}
+                                onChange={(e) =>
+                                  setFaseForm({
+                                    ...faseForm,
+                                    estado: e.target.value,
+                                  })
+                                }
+                              >
+                                <option value="completada">Completada</option>
+                                <option value="en_curso">En Curso</option>
+                                <option value="pendiente">Pendiente</option>
+                              </select>
+                            </div>
+                            <div className="col-md-4">
+                              <label className="form-label small fw-semibold mb-1">
+                                Observación de la etapa
+                              </label>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder="Opcional..."
+                                value={faseForm.observaciones}
+                                onChange={(e) =>
+                                  setFaseForm({
+                                    ...faseForm,
+                                    observaciones: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="d-flex justify-content-end gap-2 mt-2">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={() => setEditingFaseSeq(null)}
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-primary fw-semibold"
+                              disabled={loadingFaseId === fase.numero_secuencia}
+                              onClick={() =>
+                                handleSaveEditFase(fase.numero_secuencia)
+                              }
+                            >
+                              <i className="bi bi-check-lg me-1"></i>
+                              Guardar Tiempos de Fase
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Sección Inferior: Insumos y Repuestos Consumidos en esta OT (HU-009 y HU-012) */}
+            {/* Sección Inferior: Insumos y Repuestos Consumidos en esta OT */}
             <div className="mt-4 pt-3 border-top">
               <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
                 <div>
                   <h6 className="fw-bold text-uppercase text-secondary small mb-0">
                     <i className="bi bi-boxes me-1"></i>
-                    Insumos y Repuestos Imputados a esta Orden (HU-012)
+                    Insumos y Repuestos Imputados a esta Orden
                   </h6>
                   {orden.costo_materiales_consumidos !== null &&
                     orden.costo_materiales_consumidos !== undefined && (
@@ -559,7 +917,8 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
               {consumosOT.length === 0 ? (
                 <div className="card border-0 shadow-sm">
                   <div className="card-body py-3 text-center text-muted small">
-                    Aún no se registraron consumos de insumos o repuestos para esta orden.
+                    Aún no se registraron consumos de insumos o repuestos para
+                    esta orden.
                   </div>
                 </div>
               ) : (
@@ -585,7 +944,8 @@ export default function WorkOrderDetailModal({ orden, onClose, onUpdated }) {
                               {formatDateTime(c.fecha_hora)}
                             </td>
                             <td>
-                              <strong>{c.insumo_codigo}</strong> — {c.insumo_nombre}
+                              <strong>{c.insumo_codigo}</strong> —{" "}
+                              {c.insumo_nombre}
                             </td>
                             <td className="text-end fw-bold text-danger">
                               -{c.cantidad} {c.insumo_unidad}

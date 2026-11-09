@@ -54,11 +54,23 @@ export default function BudgetFormModal({
     const cli = clientes.find((c) => String(c.id_cliente) === String(cliId));
     const veh = vehiculos.find((v) => String(v.id_vehiculo) === String(vehId));
     const hoy = new Date();
+    let defaultDia = String(hoy.getDate()).padStart(2, "0");
+    let defaultMes = String(hoy.getMonth() + 1).padStart(2, "0");
+    let defaultAnio = String(hoy.getFullYear()).slice(-2);
+
+    if (editingBudget?.fecha_emision) {
+      const parts = String(editingBudget.fecha_emision).split("-");
+      if (parts.length === 3) {
+        defaultAnio = parts[0].slice(-2);
+        defaultMes = parts[1];
+        defaultDia = parts[2];
+      }
+    }
+
     return {
-      fecha_dia: prevCab.fecha_dia || String(hoy.getDate()).padStart(2, "0"),
-      fecha_mes:
-        prevCab.fecha_mes || String(hoy.getMonth() + 1).padStart(2, "0"),
-      fecha_anio: prevCab.fecha_anio || String(hoy.getFullYear()).slice(-2),
+      fecha_dia: prevCab.fecha_dia ?? defaultDia,
+      fecha_mes: prevCab.fecha_mes ?? defaultMes,
+      fecha_anio: prevCab.fecha_anio ?? defaultAnio,
       apellido_nombre: cli
         ? `${cli.apellido} ${cli.nombre}`.toUpperCase()
         : prevCab.apellido_nombre || "",
@@ -141,8 +153,19 @@ export default function BudgetFormModal({
     setErrorMsg("");
     setSaving(true);
     try {
+      // Construir fecha_emision YYYY-MM-DD a partir de las cajitas [DD] [MM] [AA] de la hoja
+      const dStr = String(datosCabeceraPlanilla.fecha_dia || "").trim().padStart(2, "0");
+      const mStr = String(datosCabeceraPlanilla.fecha_mes || "").trim().padStart(2, "0");
+      const aRaw = String(datosCabeceraPlanilla.fecha_anio || "").trim();
+      const yStr = aRaw.length === 2 ? `20${aRaw}` : aRaw || String(new Date().getFullYear());
+      const fechaConstruida =
+        /^\d{4}$/.test(yStr) && /^\d{2}$/.test(mStr) && /^\d{2}$/.test(dStr)
+          ? `${yStr}-${mStr}-${dStr}`
+          : null;
+
       const payload = {
         tipo,
+        fecha_emision: fechaConstruida,
         id_cliente: idCliente ? Number(idCliente) : null,
         id_vehiculo: idVehiculo ? Number(idVehiculo) : null,
         id_compania:
@@ -345,6 +368,8 @@ export default function BudgetFormModal({
               <ParticularSheetEditor
                 selectedVehiculo={selectedVehiculo}
                 selectedCliente={selectedCliente}
+                datosCabeceraPlanilla={datosCabeceraPlanilla}
+                setDatosCabeceraPlanilla={setDatosCabeceraPlanilla}
                 detalleLibre={detalleLibre}
                 setDetalleLibre={setDetalleLibre}
                 rubrosImportes={rubrosImportes}

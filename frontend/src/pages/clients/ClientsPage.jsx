@@ -116,7 +116,7 @@ export default function ClientsPage() {
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-people-fill text-primary me-2"></i>
-            Padrón de Clientes del Taller (HU-002)
+            Padrón de Clientes del Taller
           </h4>
           <p className="text-muted small mb-0">
             Base única e indexada por DNI, apellido y teléfono para confección de presupuestos y aviso de entregas.
@@ -278,7 +278,7 @@ export default function ClientsPage() {
                     <div className="alert alert-warning border border-warning small">
                       <div className="fw-bold mb-1">
                         <i className="bi bi-person-badge-fill me-1"></i>
-                        Ficha Existente Detectada (HU-002 Criterio 1):
+                        Ficha Existente Detectada:
                       </div>
                       <div>
                         <strong>Cliente:</strong> {existingDuplicate.apellido},{" "}

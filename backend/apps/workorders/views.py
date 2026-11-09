@@ -16,6 +16,8 @@ from apps.users.permissions import (
 from .models import OrdenDeTrabajo, TurnoTaller
 from .serializers import (
     ConsultaPublicaOrdenSerializer,
+    EditarFaseInputSerializer,
+    EditarFechasOrdenInputSerializer,
     FaseAccionInputSerializer,
     OrdenDeTrabajoSerializer,
     RegistrarEntregaInputSerializer,
@@ -23,6 +25,8 @@ from .serializers import (
 )
 from .services import (
     completar_fase_reparacion,
+    editar_fase_reparacion,
+    editar_fechas_orden,
     iniciar_fase_reparacion,
     registrar_entrega_vehiculo,
 )
@@ -153,6 +157,73 @@ class OrdenDeTrabajoViewSet(viewsets.ReadOnlyModelViewSet):
                     f"Se registró la entrega efectiva del vehículo {orden.vehiculo.patente} "
                     f"(Orden {orden.codigo_seguimiento}). Ciclo técnico finalizado."
                 ),
+                "orden": OrdenDeTrabajoSerializer(
+                    orden, context={"request": request}
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="editar-fase")
+    def editar_fase(self, request, pk=None):
+        """
+        Permite editar manualmente las fechas/horas de inicio y fin, el estado y las
+        observaciones de una fase de reparación (útil cuando se cargan autos con fecha
+        retroactiva o alguien olvidó marcar el pase de etapa en el momento).
+        """
+        orden = self.get_object()
+        serializer = EditarFaseInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        resultado = editar_fase_reparacion(
+            orden=orden,
+            numero_secuencia=data["numero_secuencia"],
+            usuario=request.user,
+            estado=data.get("estado"),
+            fecha_inicio=data.get("fecha_inicio"),
+            fecha_fin=data.get("fecha_fin"),
+            has_fecha_inicio="fecha_inicio" in request.data,
+            has_fecha_fin="fecha_fin" in request.data,
+            observaciones=data.get("observaciones"),
+        )
+        orden.refresh_from_db()
+        return Response(
+            {
+                "detail": resultado["detail"],
+                "orden": OrdenDeTrabajoSerializer(
+                    orden, context={"request": request}
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="editar-fechas",
+        permission_classes=[IsAdministrativoOrAdmin],
+    )
+    def editar_fechas(self, request, pk=None):
+        """
+        Permite editar la fecha de ingreso, fecha estimada de entrega y fecha real de entrega de la OT.
+        """
+        orden = self.get_object()
+        serializer = EditarFechasOrdenInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        orden = editar_fechas_orden(
+            orden=orden,
+            fecha_ingreso=data.get("fecha_ingreso"),
+            fecha_estimada_entrega=data.get("fecha_estimada_entrega"),
+            fecha_entrega_real=data.get("fecha_entrega_real"),
+            has_fecha_entrega_real="fecha_entrega_real" in request.data,
+        )
+        orden.refresh_from_db()
+        return Response(
+            {
+                "detail": f"Fechas de la Orden {orden.codigo_seguimiento} actualizadas correctamente.",
                 "orden": OrdenDeTrabajoSerializer(
                     orden, context={"request": request}
                 ).data,

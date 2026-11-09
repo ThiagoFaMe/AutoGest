@@ -26,9 +26,26 @@ export const completarFaseReparacion = async (idOrden, payload) => {
   return data;
 };
 
-export const registrarEntregaVehiculo = async (idOrden) => {
+export const registrarEntregaVehiculo = async (idOrden, payload = {}) => {
   const { data } = await axiosClient.post(
-    `/workorders/ordenes/${idOrden}/registrar-entrega/`
+    `/workorders/ordenes/${idOrden}/registrar-entrega/`,
+    payload
+  );
+  return data;
+};
+
+export const editarFaseReparacion = async (idOrden, payload) => {
+  const { data } = await axiosClient.post(
+    `/workorders/ordenes/${idOrden}/editar-fase/`,
+    payload
+  );
+  return data;
+};
+
+export const editarFechasOrden = async (idOrden, payload) => {
+  const { data } = await axiosClient.post(
+    `/workorders/ordenes/${idOrden}/editar-fechas/`,
+    payload
   );
   return data;
 };

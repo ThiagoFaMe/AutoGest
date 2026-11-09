@@ -93,7 +93,7 @@ export default function InventoryPage() {
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-boxes text-primary me-2"></i>
-            Inventario de Pañol, Compras y Consumos por OT (HU-010, HU-011 y HU-012)
+            Inventario de Pañol, Compras y Consumos
           </h4>
           <p className="text-muted small mb-0">
             Control de pinturas, barnices, masillas, abrasivos y autopartes con alertas automáticas de stock mínimo.
@@ -110,7 +110,7 @@ export default function InventoryPage() {
             }}
           >
             <i className="bi bi-tools me-1"></i>
-            Imputar Consumo a OT (HU-012)
+            Registrar Consumo
           </button>
 
           {isAdminOrAdministrativo && (
@@ -124,7 +124,7 @@ export default function InventoryPage() {
                 }}
               >
                 <i className="bi bi-box-arrow-in-down me-1"></i>
-                Ingreso por Remito (HU-011)
+                Ingreso por Remito
               </button>
 
               <button
@@ -136,7 +136,7 @@ export default function InventoryPage() {
                 }}
               >
                 <i className="bi bi-plus-lg me-1"></i>
-                Nuevo Artículo (HU-010)
+                Nuevo Artículo
               </button>
             </>
           )}
@@ -187,7 +187,7 @@ export default function InventoryPage() {
             <div className="card-body py-3 d-flex justify-content-between align-items-center">
               <div>
                 <div className="text-muted small fw-semibold">
-                  ALERTAS DE REPOSICIÓN CRÍTICA (HU-010/012)
+                  ALERTAS DE REPOSICIÓN CRÍTICA
                 </div>
                 <div className="fs-3 fw-bold text-danger">{totalEnAlerta}</div>
               </div>
@@ -305,7 +305,7 @@ export default function InventoryPage() {
                     <th>Categoría</th>
                     <th className="text-end">Stock Actual</th>
                     <th className="text-end">Stock Mínimo</th>
-                    <th>Estado de Reposición (HU-010)</th>
+                    <th>Estado de Reposición</th>
                     {isAdminOrAdministrativo && (
                       <th className="text-end">Costo Unit.</th>
                     )}
@@ -453,7 +453,7 @@ export default function InventoryPage() {
                         ) : (
                           <span className="badge bg-primary">
                             <i className="bi bi-arrow-up-right-circle me-1"></i>
-                            Consumo en OT
+                            {m.orden_codigo ? "Consumo en OT" : "Consumo Pañol"}
                           </span>
                         )}
                       </td>

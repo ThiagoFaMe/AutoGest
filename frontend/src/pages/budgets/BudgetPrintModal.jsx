@@ -95,13 +95,13 @@ export default function BudgetPrintModal({ budget, onClose }) {
                       <div className="fw-bold small">PRESUPUESTO / ORDEN</div>
                       <div className="d-inline-flex gap-1 mt-1">
                         <span className="border border-dark px-2 py-1 fw-bold">
-                          {dia}
+                          {printDia}
                         </span>
                         <span className="border border-dark px-2 py-1 fw-bold">
-                          {mes}
+                          {printMes}
                         </span>
                         <span className="border border-dark px-2 py-1 fw-bold">
-                          {anio}
+                          {printAnio}
                         </span>
                       </div>
                       <div style={{ fontSize: "0.7rem" }}>FECHA</div>

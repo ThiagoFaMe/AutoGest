@@ -213,6 +213,26 @@ class FaseAccionInputSerializer(serializers.Serializer):
     observaciones = serializers.CharField(
         max_length=500, required=False, allow_blank=True, default=""
     )
+    fecha_inicio = serializers.DateTimeField(required=False, allow_null=True)
+    fecha_fin = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class EditarFaseInputSerializer(serializers.Serializer):
+    numero_secuencia = serializers.IntegerField(min_value=1, max_value=8, required=True)
+    estado = serializers.ChoiceField(
+        choices=FaseReparacion.EstadoFase.choices, required=False
+    )
+    fecha_inicio = serializers.DateTimeField(required=False, allow_null=True)
+    fecha_fin = serializers.DateTimeField(required=False, allow_null=True)
+    observaciones = serializers.CharField(
+        max_length=500, required=False, allow_blank=True
+    )
+
+
+class EditarFechasOrdenInputSerializer(serializers.Serializer):
+    fecha_ingreso = serializers.DateField(required=False)
+    fecha_estimada_entrega = serializers.DateField(required=False)
+    fecha_entrega_real = serializers.DateField(required=False, allow_null=True)
 
 
 class RegistrarEntregaInputSerializer(serializers.Serializer):

@@ -57,7 +57,7 @@ export default function DashboardPage() {
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-speedometer2 text-primary me-2"></i>
-            Dashboard Principal — Panel de Control de KPIs (Prototipo 1 • HU-014)
+            Dashboard Principal — Panel de Control de KPIs
           </h4>
           <p className="text-muted small mb-0">
             Métricas en tiempo real de planta, conversión de presupuestos, stock crítico, cartera de seguros y flujo de caja.

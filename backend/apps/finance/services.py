@@ -420,6 +420,8 @@ def calcular_kpis_dashboard() -> dict:
     (f) Cantidad de insumos en alerta de stock mínimo.
     """
     sincronizar_estados_mora_cuentas()
+    from apps.budgets.services import sincronizar_presupuestos_vencidos
+    sincronizar_presupuestos_vencidos()
 
     # (a) Vehículos en taller y distribución por fase
     ordenes_activas_qs = OrdenDeTrabajo.objects.filter(

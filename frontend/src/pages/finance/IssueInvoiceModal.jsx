@@ -80,7 +80,7 @@ export default function IssueInvoiceModal({ onClose, onSuccess }) {
           <div className="modal-header bg-dark text-white">
             <h5 className="modal-title fw-bold">
               <i className="bi bi-receipt-cutoff me-2"></i>
-              Emitir Factura y Generar Cuenta por Cobrar (HU-013)
+              Emitir Factura y Generar Cuenta por Cobrar
             </h5>
             <button
               type="button"
@@ -126,7 +126,7 @@ export default function IssueInvoiceModal({ onClose, onSuccess }) {
                   </div>
                   <div className="text-muted">
                     El vencimiento se calculará automáticamente sumando el plazo
-                    configurado de la aseguradora (HU-004 y HU-013 Criterio 1).
+                    configurado de la aseguradora.
                   </div>
                 </div>
               )}

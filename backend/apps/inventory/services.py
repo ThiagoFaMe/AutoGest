@@ -107,24 +107,17 @@ def registrar_consumo_ot(
 ) -> dict:
     """
     HU-012 Criterios 1, 2 y 3:
-    1. Exige seleccionar una OrdenDeTrabajo activa y bloquea la operación si
+    1. Permite asociar opcionalmente una OrdenDeTrabajo activa (ej. para autopartes o pinturas específicas)
+       o registrar un consumo general de taller (ej. cintas, lijas) y bloquea la operación si
        cantidad > stock_actual (impidiendo existencias negativas).
     2. Descuenta automáticamente stock_actual = stock_actual - cantidad, registra
-       el MovimientoStock vinculado a la orden y al usuario con el costo_unitario vigente.
+       el MovimientoStock y calcula el costo_unitario vigente.
     3. Si luego del descuento stock_actual <= stock_minimo, dispara alerta inmediata
        de 'Stock Mínimo Alcanzado'.
     """
-    if orden is None:
-        raise ValidationError(
-            {
-                "id_orden": (
-                    "Para registrar un egreso por consumo es obligatorio seleccionar "
-                    "una Orden de Trabajo activa."
-                )
-            }
-        )
-
-    if orden.fecha_entrega_real is not None or orden.estado_actual == "Entregada":
+    if orden is not None and (
+        orden.fecha_entrega_real is not None or orden.estado_actual == "Entregada"
+    ):
         raise ValidationError(
             {
                 "id_orden": (
@@ -157,10 +150,13 @@ def registrar_consumo_ot(
         )
 
     costo_vigente = insumo_locked.costo_unitario
-    ref_texto = (
-        observacion_comprobante.strip()
-        or f"Consumo en {orden.codigo_seguimiento} ({orden.vehiculo.patente})"
-    )
+    if orden is not None:
+        patente_str = orden.vehiculo.patente if orden.vehiculo else "S/P"
+        default_ref = f"Consumo en {orden.codigo_seguimiento} ({patente_str})"
+    else:
+        default_ref = "Consumo general de taller / pañol"
+
+    ref_texto = observacion_comprobante.strip() or default_ref
 
     movimiento = MovimientoStock.objects.create(
         insumo=insumo_locked,
@@ -179,11 +175,19 @@ def registrar_consumo_ot(
 
     alerta_disparada = insumo_locked.en_alerta_stock
 
-    detail_msg = (
-        f"Consumo imputado a {orden.codigo_seguimiento}: -{cant_dec} "
-        f"{insumo_locked.unidad_medida} de '{insumo_locked.nombre}'. "
-        f"Stock remanente: {insumo_locked.stock_actual} {insumo_locked.unidad_medida}."
-    )
+    if orden is not None:
+        detail_msg = (
+            f"Consumo imputado a {orden.codigo_seguimiento}: -{cant_dec} "
+            f"{insumo_locked.unidad_medida} de '{insumo_locked.nombre}'. "
+            f"Stock remanente: {insumo_locked.stock_actual} {insumo_locked.unidad_medida}."
+        )
+    else:
+        detail_msg = (
+            f"Consumo general de pañol registrado: -{cant_dec} "
+            f"{insumo_locked.unidad_medida} de '{insumo_locked.nombre}'. "
+            f"Stock remanente: {insumo_locked.stock_actual} {insumo_locked.unidad_medida}."
+        )
+
     if alerta_disparada:
         detail_msg += (
             f" ¡ALERTA DE REPOSICIÓN! Stock Mínimo Alcanzado "
@@ -195,7 +199,11 @@ def registrar_consumo_ot(
         "movimiento": movimiento,
         "insumo": insumo_locked,
         "alerta_stock_minimo": alerta_disparada,
-        "costo_acumulado_ot": calcular_costo_materiales_orden(orden),
+        "costo_acumulado_ot": (
+            calcular_costo_materiales_orden(orden)
+            if orden is not None
+            else Decimal("0.00")
+        ),
     }
 
 

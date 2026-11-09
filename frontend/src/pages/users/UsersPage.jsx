@@ -116,7 +116,7 @@ export default function UsersPage() {
         <div>
           <h4 className="fw-bold mb-1">
             <i className="bi bi-person-lock text-primary me-2"></i>
-            Gestión de Usuarios y Roles (HU-001)
+            Gestión de Usuarios y Roles
           </h4>
           <p className="text-muted small mb-0">
             Control de acceso basado en roles (RBAC), políticas de complejidad de clave y desbloqueo de cuentas.
@@ -333,7 +333,7 @@ export default function UsersPage() {
                     />
                     <div className="mt-2 p-2 bg-light rounded border small">
                       <div className="fw-semibold text-muted mb-1">
-                        Política de complejidad (HU-001):
+                        Política de complejidad:
                       </div>
                       {pwdRules.map((r, idx) => (
                         <div

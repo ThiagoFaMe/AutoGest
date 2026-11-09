@@ -197,8 +197,8 @@ export default function BudgetsPage() {
                 }}
               >
                 <option value="">Todas las modalidades</option>
-                <option value="particular">Particular (HU-005)</option>
-                <option value="aseguradora">Compañía Aseguradora (HU-006)</option>
+                <option value="particular">Particular</option>
+                <option value="aseguradora">Compañía Aseguradora</option>
               </select>
             </div>
             <div className="col-md-2">

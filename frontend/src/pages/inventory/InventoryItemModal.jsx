@@ -63,7 +63,7 @@ export default function InventoryItemModal({ insumo, onClose, onSaved }) {
               <i className="bi bi-box-seam me-2"></i>
               {isEditing
                 ? `Editar Insumo / Repuesto (${insumo.codigo})`
-                : "Alta de Insumo o Repuesto en Catálogo (HU-010)"}
+                : "Alta de Insumo o Repuesto en Catálogo"}
             </h5>
             <button
               type="button"

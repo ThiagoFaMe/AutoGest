@@ -8,15 +8,29 @@ import React from "react";
 export default function ParticularSheetEditor({
   selectedVehiculo,
   selectedCliente,
+  datosCabeceraPlanilla,
+  setDatosCabeceraPlanilla,
   detalleLibre,
   setDetalleLibre,
   rubrosImportes,
   setRubrosImportes,
 }) {
   const hoy = new Date();
-  const dia = String(hoy.getDate()).padStart(2, "0");
-  const mes = String(hoy.getMonth() + 1).padStart(2, "0");
-  const anio = String(hoy.getFullYear()).slice(-2);
+  const dia =
+    datosCabeceraPlanilla?.fecha_dia ?? String(hoy.getDate()).padStart(2, "0");
+  const mes =
+    datosCabeceraPlanilla?.fecha_mes ??
+    String(hoy.getMonth() + 1).padStart(2, "0");
+  const anio =
+    datosCabeceraPlanilla?.fecha_anio ?? String(hoy.getFullYear()).slice(-2);
+
+  const handleHeaderDateChange = (field, val) => {
+    if (!setDatosCabeceraPlanilla) return;
+    setDatosCabeceraPlanilla({
+      ...(datosCabeceraPlanilla || {}),
+      [field]: val,
+    });
+  };
 
   const manoObra = Number(rubrosImportes.mano_obra) || 0;
   const repuestos = Number(rubrosImportes.repuestos) || 0;
@@ -105,27 +119,57 @@ export default function ParticularSheetEditor({
                   PRESUPUESTO / ORDEN
                 </div>
                 <div className="d-inline-flex gap-1">
-                  <span
-                    className="border border-dark px-2 py-1 fw-bold"
-                    style={{ minWidth: "36px" }}
-                  >
-                    {dia}
-                  </span>
-                  <span
-                    className="border border-dark px-2 py-1 fw-bold"
-                    style={{ minWidth: "36px" }}
-                  >
-                    {mes}
-                  </span>
-                  <span
-                    className="border border-dark px-2 py-1 fw-bold"
-                    style={{ minWidth: "36px" }}
-                  >
-                    {anio}
-                  </span>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    className="border border-2 border-dark text-center fw-bold"
+                    style={{
+                      width: "42px",
+                      height: "36px",
+                      fontSize: "1.05rem",
+                      borderRadius: "4px",
+                    }}
+                    title="Día de emisión (editable)"
+                    value={dia}
+                    onChange={(e) =>
+                      handleHeaderDateChange("fecha_dia", e.target.value)
+                    }
+                  />
+                  <input
+                    type="text"
+                    maxLength={2}
+                    className="border border-2 border-dark text-center fw-bold"
+                    style={{
+                      width: "42px",
+                      height: "36px",
+                      fontSize: "1.05rem",
+                      borderRadius: "4px",
+                    }}
+                    title="Mes de emisión (editable)"
+                    value={mes}
+                    onChange={(e) =>
+                      handleHeaderDateChange("fecha_mes", e.target.value)
+                    }
+                  />
+                  <input
+                    type="text"
+                    maxLength={2}
+                    className="border border-2 border-dark text-center fw-bold"
+                    style={{
+                      width: "42px",
+                      height: "36px",
+                      fontSize: "1.05rem",
+                      borderRadius: "4px",
+                    }}
+                    title="Año de emisión (editable)"
+                    value={anio}
+                    onChange={(e) =>
+                      handleHeaderDateChange("fecha_anio", e.target.value)
+                    }
+                  />
                 </div>
                 <div className="text-muted" style={{ fontSize: "0.7rem" }}>
-                  FECHA
+                  FECHA (EDITABLE)
                 </div>
               </div>
             </div>

@@ -239,7 +239,132 @@ def registrar_entrega_vehiculo(
             "No se puede registrar la entrega del vehículo porque aún existen fases técnicas sin completar."
         )
 
-    orden.fecha_entrega_real = fecha_entrega_real or date.today()
+    if not fecha_entrega_real:
+        fase_8 = orden.fases.filter(numero_secuencia=8).first()
+        if fase_8 and fase_8.fecha_fin:
+            fecha_entrega_real = timezone.localtime(fase_8.fecha_fin).date()
+        else:
+            fecha_entrega_real = date.today()
+
+    orden.fecha_entrega_real = fecha_entrega_real
     orden.estado_actual = "Entregada"
     orden.save(update_fields=["fecha_entrega_real", "estado_actual"])
+    return orden
+
+
+@transaction.atomic
+def editar_fase_reparacion(
+    *,
+    orden: OrdenDeTrabajo,
+    numero_secuencia: int,
+    usuario,
+    estado: str | None = None,
+    fecha_inicio=None,
+    fecha_fin=None,
+    has_fecha_inicio: bool = False,
+    has_fecha_fin: bool = False,
+    observaciones: str | None = None,
+) -> dict:
+    """
+    Permite corregir o cargar manualmente la fecha/hora de entrada (fecha_inicio),
+    la fecha/hora de salida (fecha_fin), el estado y las observaciones de una fase.
+    Recalcula automáticamente la duración de la fase y las métricas promedio del Dashboard.
+    """
+    orden = OrdenDeTrabajo.objects.select_for_update().get(pk=orden.pk)
+    fases = list(orden.fases.select_for_update().order_by("numero_secuencia"))
+
+    target_fase = next((f for f in fases if f.numero_secuencia == int(numero_secuencia)), None)
+    if not target_fase:
+        raise ValidationError(f"No existe la fase con secuencia {numero_secuencia} en esta orden.")
+
+    if estado is not None:
+        target_fase.estado = estado
+    if has_fecha_inicio:
+        target_fase.fecha_inicio = fecha_inicio
+    if has_fecha_fin:
+        target_fase.fecha_fin = fecha_fin
+    if observaciones is not None:
+        target_fase.observaciones = observaciones.strip()
+
+    if (
+        target_fase.fecha_inicio
+        and target_fase.fecha_fin
+        and target_fase.fecha_fin < target_fase.fecha_inicio
+    ):
+        raise ValidationError(
+            "La fecha/hora de fin de la fase no puede ser anterior a la fecha/hora de inicio."
+        )
+
+    if target_fase.estado != FaseReparacion.EstadoFase.PENDIENTE and not target_fase.usuario_responsable:
+        target_fase.usuario_responsable = usuario
+
+    target_fase.save()
+
+    # Sincronizar el estado_actual de la orden si no está entregada, o actualizar fecha_entrega_real si editaron el fin de la Fase 8
+    if not orden.fecha_entrega_real:
+        fases_refreshed = list(orden.fases.order_by("numero_secuencia"))
+        en_curso = next(
+            (f for f in fases_refreshed if f.estado == FaseReparacion.EstadoFase.EN_CURSO),
+            None,
+        )
+        pendiente = next(
+            (f for f in fases_refreshed if f.estado == FaseReparacion.EstadoFase.PENDIENTE),
+            None,
+        )
+        if en_curso:
+            orden.estado_actual = en_curso.nombre_fase[:30]
+        elif pendiente:
+            orden.estado_actual = pendiente.nombre_fase[:30]
+        else:
+            orden.estado_actual = "Lista para entrega"
+        orden.save(update_fields=["estado_actual"])
+    elif target_fase.numero_secuencia == 8 and target_fase.fecha_fin:
+        orden.fecha_entrega_real = timezone.localtime(target_fase.fecha_fin).date()
+        orden.save(update_fields=["fecha_entrega_real"])
+
+    return {
+        "orden": orden,
+        "fase": target_fase,
+        "detail": (
+            f"Tiempos de la Fase '{target_fase.numero_secuencia}-{target_fase.nombre_fase}' "
+            f"actualizados correctamente."
+        ),
+    }
+
+
+@transaction.atomic
+def editar_fechas_orden(
+    *,
+    orden: OrdenDeTrabajo,
+    fecha_ingreso: date | None = None,
+    fecha_estimada_entrega: date | None = None,
+    fecha_entrega_real: date | None = None,
+    has_fecha_entrega_real: bool = False,
+) -> OrdenDeTrabajo:
+    """
+    Permite editar las fechas generales de la Orden de Trabajo (Ingreso, Promesa y Entrega Real).
+    """
+    orden = OrdenDeTrabajo.objects.select_for_update().get(pk=orden.pk)
+    if fecha_ingreso is not None:
+        orden.fecha_ingreso = fecha_ingreso
+    if fecha_estimada_entrega is not None:
+        orden.fecha_estimada_entrega = fecha_estimada_entrega
+    if has_fecha_entrega_real:
+        orden.fecha_entrega_real = fecha_entrega_real
+        if fecha_entrega_real:
+            orden.estado_actual = "Entregada"
+        else:
+            fases = list(orden.fases.order_by("numero_secuencia"))
+            en_curso = next((f for f in fases if f.estado == FaseReparacion.EstadoFase.EN_CURSO), None)
+            pendiente = next((f for f in fases if f.estado == FaseReparacion.EstadoFase.PENDIENTE), None)
+            orden.estado_actual = (
+                en_curso.nombre_fase[:30]
+                if en_curso
+                else (pendiente.nombre_fase[:30] if pendiente else "Lista para entrega")
+            )
+
+    if orden.fecha_estimada_entrega and orden.fecha_ingreso and orden.fecha_estimada_entrega < orden.fecha_ingreso:
+        raise ValidationError("La fecha estimada de entrega no puede ser anterior a la fecha de ingreso.")
+
+    orden.save(update_fields=["fecha_ingreso", "fecha_estimada_entrega", "fecha_entrega_real", "estado_actual"])
     return orden

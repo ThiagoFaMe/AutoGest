@@ -26,9 +26,6 @@ export default function StockConsumptionModal({
         const list = Array.isArray(data) ? data : data.results || [];
         const activas = list.filter((o) => !o.fecha_entrega_real);
         setOrdenesActivas(activas);
-        if (!preselectedOrden && activas.length > 0) {
-          setIdOrden(activas[0].id_orden);
-        }
       } catch (err) {
         console.error("Error cargando órdenes activas:", err);
       }
@@ -77,7 +74,7 @@ export default function StockConsumptionModal({
           <div className="modal-header bg-primary text-white">
             <h5 className="modal-title fw-bold">
               <i className="bi bi-tools me-2"></i>
-              Registrar Consumo de Insumo en OT (HU-012)
+              Registrar Consumo de Insumo o Repuesto
             </h5>
             <button
               type="button"
@@ -97,16 +94,17 @@ export default function StockConsumptionModal({
 
               <div className="mb-3">
                 <label className="form-label fw-semibold small">
-                  Orden de Trabajo Destino (Vehículo en Planta) *
+                  Orden de Trabajo Destino (Opcional)
                 </label>
                 <select
                   className="form-select fw-semibold"
                   value={idOrden}
                   onChange={(e) => setIdOrden(e.target.value)}
                   disabled={Boolean(preselectedOrden)}
-                  required
                 >
-                  <option value="">-- Seleccione una Orden Activa --</option>
+                  <option value="">
+                    -- Sin vincular a Orden (Consumo general de taller / pañol) --
+                  </option>
                   {ordenesActivas.map((ot) => (
                     <option key={ot.id_orden} value={ot.id_orden}>
                       {ot.codigo_seguimiento} • {ot.vehiculo_patente} (
@@ -114,6 +112,9 @@ export default function StockConsumptionModal({
                     </option>
                   ))}
                 </select>
+                <small className="text-muted">
+                  Podés asociarlo a un vehículo en planta (ej.: autopartes) o dejarlo como consumo general (ej.: cintas, lijas).
+                </small>
               </div>
 
               <div className="mb-3">
@@ -175,7 +176,7 @@ export default function StockConsumptionModal({
                 />
                 <small className="text-muted">
                   Si supera el stock disponible ({selectedInsumo?.stock_actual}{" "}
-                  {selectedInsumo?.unidad_medida}), el sistema bloqueará el retiro (HU-012).
+                  {selectedInsumo?.unidad_medida}), el sistema bloqueará el retiro.
                 </small>
               </div>
 
@@ -206,7 +207,7 @@ export default function StockConsumptionModal({
                 className="btn btn-primary fw-semibold px-4"
                 disabled={loading}
               >
-                {loading ? "Descontando..." : "Confirmar Consumo en OT"}
+                {loading ? "Descontando..." : "Confirmar Consumo"}
               </button>
             </div>
           </form>
